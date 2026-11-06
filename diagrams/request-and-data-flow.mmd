@@ -1,0 +1,23 @@
+sequenceDiagram
+    participant User as Browser
+    participant CDN as CloudFront
+    participant Site as S3 site
+    participant API as API ingress
+    participant App as Backend API
+    participant Redis
+    participant DB as PostgreSQL
+    participant Riot as Riot API
+    participant Archive as S3 archives
+
+    User->>CDN: Load static app or SEO object
+    CDN->>Site: Read object on cache miss
+    Site-->>User: HTML, JavaScript, CSS, or static data
+    User->>API: Request product data
+    API->>App: Route request
+    App->>Redis: Check shared admission and queue state
+    App->>DB: Read or write durable facts
+    App->>Riot: Send admitted API request
+    Riot-->>App: Response or external throttle
+    App->>Archive: Read or write match archive
+    App-->>User: JSON response
+

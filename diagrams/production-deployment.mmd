@@ -1,0 +1,31 @@
+flowchart TB
+    subgraph Cloud[Production AWS account]
+        subgraph Control[ARM64 EC2 control plane]
+            K3s[K3s server]
+            Ingress[Traefik ingress]
+            API[Backend API]
+            Redis[Redis]
+            Dashboard[Private dashboard]
+        end
+        DB[(PostgreSQL on EBS)]
+        S3[S3 site, archives, and job objects]
+        CDN[CloudFront]
+        ECR[ECR image repositories]
+    end
+
+    subgraph Hybrid[On-prem Linux host]
+        Worker[Match and ladder workers]
+    end
+
+    K3s --> Ingress
+    Ingress --> API
+    Ingress --> Dashboard
+    API --> Redis
+    API --> DB
+    API --> S3
+    Worker --> Redis
+    Worker --> DB
+    Worker --> S3
+    ECR --> K3s
+    S3 --> CDN
+

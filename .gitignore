@@ -1,0 +1,12 @@
+# Never commit Terraform state, plans, credentials, or generated local output.
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+.terraform/
+.env
+.env.*
+*.pem
+generated/
+
