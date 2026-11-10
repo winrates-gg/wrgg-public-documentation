@@ -2,7 +2,12 @@
 
 ## Purpose
 
-The backend is the product runtime. It exposes the API used by the React
+At its core, WINRATES.GG is a cache in front of the Riot Games APIs for League of Legends that augments its payloads and implements product & domain specific patterns. The `backend` respository implements the primary ways in which WR.GG interacts with the Riot Games APIs. The React `frontend` integrates with this backend to give the frontend access to the data users care about. This backend is also responsible for defining the ways in which WR.GG interacts with supporting Riot Games and third party services such as Community Dragon to keep WR.GG constantly updated in the context of supporting a game, League of Legends, that has updated every 2 weeks for the last 16 years. Since much of the automatic upkeep code relies on the same data models and patterns the backend eforces, that logic is defined and bundled here as wel.
+
+## Primary Technology
+FastAPI Python Web Framework. FastAPI was selected and WR.GG was migrated out of Django during development for its simpler async support and syntax. Considering WR.GG relies on over 1 million external API calls per day to operate its baseline. performance and simplicity made FastAPI attractive.
+
+ It exposes the API used by the React
 application, protects outbound Riot API traffic, persists durable product
 facts, and runs the workers that turn external game data into searchable
 analytics.

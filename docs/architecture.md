@@ -2,11 +2,10 @@
 
 ## Purpose
 
-WINRATES.GG is a data-heavy League of Legends companion app. It combines
-Riot API lookups, durable match data, static game assets, asynchronous
-ingestion, and derived analytics into one user-facing product.
+WINRATES.GG is a League of Legends "companion app". In a technical sense, it is largely a: cache in front of Riot Games' production services and also a data ingestion, cleaning, analysis, and storage pipeline. The end results takes Riot Games' Leage of Legend related API responses and implements a enhanced data model that gives players performant access to the insights competitive & casual League of Legends players care about.
 
-The production architecture is deliberately small but operationally serious:
+
+The production architecture is lean but parsimonious. It emphasizes sensical patterns and defenible cost savings, informed by the scale on which WINRATES.GG operates at this time.
 
 - static web delivery is separated from runtime compute;
 - durable application data is separated from temporary coordination state;
