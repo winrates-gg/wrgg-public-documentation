@@ -1,0 +1,17 @@
+flowchart TB
+    Modules[Versioned Terraform modules]
+    Live[Terraform live composition]
+    State[(Remote state)]
+    AWS[AWS foundation]
+    Network[VPC and control plane]
+    Storage[EBS, S3, ECR]
+    Delivery[CloudFront, DNS, certificates]
+    Observability[CloudWatch]
+
+    Modules --> Live
+    Live --> State
+    Live --> AWS
+    AWS --> Network
+    AWS --> Storage
+    AWS --> Delivery
+    AWS --> Observability

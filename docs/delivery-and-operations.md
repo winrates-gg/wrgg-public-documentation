@@ -1,5 +1,10 @@
 # Delivery And Operations
 
+This page is the cross-cutting lifecycle view. The implementation concerns are
+described separately in [Cloud infrastructure](cloud-infrastructure.md),
+[Host and cluster foundation](host-and-cluster.md), [Kubernetes delivery](kubernetes-delivery.md),
+[Backend runtime](backend-runtime.md), and [Frontend delivery](frontend-delivery.md).
+
 ## Release Model
 
 The system uses immutable release identities across its repositories.
@@ -126,4 +131,3 @@ same production shape and deployment path, with controlled differences:
 
 The important engineering property is that staging validates the production
 path without becoming a separate platform design.
-

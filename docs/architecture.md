@@ -46,6 +46,21 @@ flowchart LR
     GitHub --> K3s
 ```
 
+The focused views are organized by concern rather than by repository:
+
+- [Backend runtime](backend-runtime.md) explains the API, workers, and Riot
+  request boundary.
+- [Frontend delivery](frontend-delivery.md) explains the public CDN surface
+  and private dashboard surface.
+- [Data and analytics](data-and-analytics.md) explains storage and derived
+  data lifecycles.
+- [Cloud infrastructure](cloud-infrastructure.md) explains Terraform and AWS
+  ownership.
+- [Host and cluster foundation](host-and-cluster.md) explains Ansible, SSM,
+  Tailscale, and K3s host boundaries.
+- [Kubernetes delivery](kubernetes-delivery.md) explains Helm, GitOps, and
+  Argo reconciliation.
+
 ## Major Boundaries
 
 ### Browser Delivery
@@ -206,4 +221,3 @@ redundant platform. The main constraints are intentional and visible:
 
 The design is therefore optimized for recoverability, low cost, and clear
 failure boundaries rather than automatic multi-zone failover.
-

@@ -1,0 +1,20 @@
+flowchart TB
+    Browser[Browser]
+    API[FastAPI API]
+    Queue[Match queue]
+    Workers[Worker image]
+    Redis[(Redis)]
+    DB[(PostgreSQL)]
+    S3[(S3 archives)]
+    Riot[Riot API]
+
+    Browser --> API
+    API --> Redis
+    API --> DB
+    API --> Riot
+    API --> Queue
+    Queue --> Workers
+    Workers --> Redis
+    Workers --> DB
+    Workers --> S3
+    Workers --> Riot

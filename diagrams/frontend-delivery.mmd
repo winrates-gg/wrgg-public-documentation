@@ -1,0 +1,17 @@
+flowchart LR
+    Source[Frontend source]
+    Bundle[Immutable public bundle]
+    PublicS3[(Public S3 bucket)]
+    CDN[CloudFront]
+    Browser[Public browser]
+    SEO[SEO publisher]
+    Dashboard[Private dashboard image]
+    Ingress[Private ingress]
+
+    Source --> Bundle
+    Bundle --> PublicS3
+    PublicS3 --> CDN
+    CDN --> Browser
+    SEO --> PublicS3
+    Source --> Dashboard
+    Dashboard --> Ingress

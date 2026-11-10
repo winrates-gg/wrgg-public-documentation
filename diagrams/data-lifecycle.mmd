@@ -1,0 +1,19 @@
+flowchart TB
+    Riot[Riot API]
+    Queue[Queue]
+    Worker[Match worker]
+    Archive[(S3 archive)]
+    DB[(PostgreSQL)]
+    Analytics[Derived analytics]
+    SEO[SEO artifact]
+    Site[(Public site bucket)]
+
+    Riot --> Queue
+    Queue --> Worker
+    Worker --> Archive
+    Worker --> DB
+    Archive --> Worker
+    DB --> Analytics
+    Analytics --> DB
+    DB --> SEO
+    SEO --> Site

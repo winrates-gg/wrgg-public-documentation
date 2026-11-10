@@ -1,0 +1,13 @@
+flowchart LR
+    Artifacts[Immutable app and chart releases]
+    Values[Environment values]
+    Desired[k8s-live desired state]
+    Argo[Argo CD]
+    Cluster[K3s]
+    Runtime[Runtime workloads]
+
+    Artifacts --> Desired
+    Values --> Desired
+    Desired --> Argo
+    Argo --> Cluster
+    Cluster --> Runtime
