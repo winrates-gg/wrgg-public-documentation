@@ -54,24 +54,27 @@ The intended reading order is:
 
 ## Diagrams
 
-The diagrams are editable Mermaid source files:
+Each diagram is embedded as a fenced Mermaid block in the Markdown page for
+the concern it explains. GitHub renders those blocks directly, so readers do
+not need a special diagram file extension or a separate rendering step.
 
-- [Production context](diagrams/production-context.mmd)
-- [Production deployment topology](diagrams/production-deployment.mmd)
-- [Request and data flow](diagrams/request-and-data-flow.mmd)
-- [Backend runtime](diagrams/backend-runtime.mmd)
-- [Frontend delivery](diagrams/frontend-delivery.mmd)
-- [Data lifecycle](diagrams/data-lifecycle.mmd)
-- [Cloud foundation](diagrams/cloud-foundation.mmd)
-- [Host attachment and cluster foundation](diagrams/host-attachment.mmd)
-- [Kubernetes delivery](diagrams/kubernetes-delivery.mmd)
-- [Release pipeline](diagrams/release-pipeline.mmd)
-- [Recovery model](diagrams/recovery-model.mmd)
+The main diagram locations are:
 
-GitHub renders Mermaid directly when the source is included in a Markdown
-document. The source files are kept separately so the diagrams can also be
-rendered with Mermaid-compatible tooling for a resume, presentation, or case
-study page.
+- [Production architecture](docs/architecture.md): system context, account
+  shape, Kubernetes model, and request flow.
+- [Backend runtime](docs/backend-runtime.md): API, workers, jobs, state, and
+  Riot API interactions.
+- [Frontend delivery](docs/frontend-delivery.md): public CDN delivery and the
+  private dashboard surface.
+- [Data and analytics](docs/data-and-analytics.md): ingestion and derivation.
+- [Cloud infrastructure](docs/cloud-infrastructure.md): Terraform and AWS
+  foundation.
+- [Host and cluster foundation](docs/host-and-cluster.md): Ansible attachment
+  and hybrid runtime.
+- [Kubernetes delivery](docs/kubernetes-delivery.md): Helm, desired state, and
+  Argo reconciliation.
+- [Delivery and operations](docs/delivery-and-operations.md): releases and
+  recovery.
 
 ## Scope
 
