@@ -1,6 +1,6 @@
 # Backend Runtime
 
-## Purpose
+## High Level Overview
 
 At its core the WINRATES.GG (WR.GG) API, or `backend` implements a read-through cache that sits between UI application users and the various Riot Games APIs for League of Legends. WR.GG also augments Riot payloads and implements product- and domain-specific data ingesting, data cleaning, data normalization, data analysis, and data storage patterns. Beyond the core Riot APIs WR.GG also relies on with supporting Riot and third-party services such as Community Dragon which provide critical and ever-changing foundational information. Much of this automatic upkeep code uses the same data models and patterns as the API, so that logic is defined and bundled here as well.
 
@@ -87,9 +87,13 @@ individual response paths.
 
 This sequence view is initiated by the browser. Read each section from top to
 bottom. `alt` means that exactly one branch occurs; the shaded blocks make the
-alternative request modes and outcomes explicit.
+alternative request modes and outcomes explicit. The first-level alternatives
+share one blue-gray fill; the nested outcome blocks share the next color tier.
+Within that tier, green identifies admission and yellow identifies local
+blocking.
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"background": "#0f172a", "primaryColor": "#172033", "primaryTextColor": "#f8fafc", "primaryBorderColor": "#94a3b8", "lineColor": "#cbd5e1", "actorBkg": "#111827", "actorBorder": "#cbd5e1", "actorTextColor": "#f8fafc", "actorLineColor": "#64748b", "signalColor": "#cbd5e1", "signalTextColor": "#f8fafc", "labelBoxBkgColor": "#1e293b", "labelBoxBorderColor": "#94a3b8", "labelTextColor": "#f8fafc", "noteBkgColor": "#334155", "noteBorderColor": "#cbd5e1", "noteTextColor": "#f8fafc"}}}%%
 sequenceDiagram
     actor User as Browser / user
     participant API as FastAPI
@@ -100,30 +104,38 @@ sequenceDiagram
     participant Queue as match_build_queue
 
     Note over User,Queue: SYNCHRONOUS USER REQUEST
-    rect rgb(232, 240, 248)
+    rect rgb(23, 32, 51)
         alt ALTERNATIVE: update=False
-            User->>API: Request existing profile
-            API->>DB: Read durable state
-            DB-->>API: Existing profile data
-            API-->>User: Current stored response
+            rect rgb(30, 50, 78)
+                User->>API: Request existing profile
+                API->>DB: Read durable state
+                DB-->>API: Existing profile data
+                API-->>User: Current stored response
+            end
         else ALTERNATIVE: update=True
-            User->>API: Request refresh
-            API->>ND: Protected Riot request
-            ND->>Redis: Preflight admission
-            Redis-->>ND: Admit or block
+            rect rgb(30, 50, 78)
+                User->>API: Request refresh
+                API->>ND: Protected Riot request
+                ND->>Redis: Preflight admission
+                Redis-->>ND: Admit or block
 
-            alt OUTCOME: admitted
-                ND->>Riot: Riot API request(s)
-                Riot-->>ND: Fresh Riot data
-                ND-->>API: Fresh result
-                API->>DB: Persist refreshed profile state
-                API->>Queue: Enqueue missing match IDs
-                API-->>User: Fresh profile response
-            else OUTCOME: internally blocked
-                ND-->>API: Rate-limit exception
-                API->>DB: Read existing profile state
-                DB-->>API: Stale profile data
-                API-->>User: Cached/partial response and retry-after
+                alt OUTCOME: admitted
+                    rect rgb(25, 76, 52)
+                        ND->>Riot: Riot API request(s)
+                        Riot-->>ND: Fresh Riot data
+                        ND-->>API: Fresh result
+                        API->>DB: Persist refreshed profile state
+                        API->>Queue: Enqueue missing match IDs
+                        API-->>User: Fresh profile response
+                    end
+                else OUTCOME: internally blocked
+                    rect rgb(82, 69, 24)
+                        ND-->>API: Rate-limit exception
+                        API->>DB: Read existing profile state
+                        DB-->>API: Stale profile data
+                        API-->>User: Cached/partial response and retry-after
+                    end
+                end
             end
         end
     end
@@ -139,9 +151,13 @@ instead of a stale response.
 
 This sequence view has two kinds of initiator. The Kubernetes controller keeps
 long-running worker Deployments alive; Kubernetes CronJobs start finite
-scheduled jobs. These paths do not require a browser request.
+scheduled jobs. These paths do not require a browser request. All first-level
+background paths share one blue-gray fill, while nested outcomes share the next
+color tier. Within that tier, green identifies admission and yellow identifies
+local blocking.
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"background": "#0f172a", "primaryColor": "#172033", "primaryTextColor": "#f8fafc", "primaryBorderColor": "#94a3b8", "lineColor": "#cbd5e1", "actorBkg": "#111827", "actorBorder": "#cbd5e1", "actorTextColor": "#f8fafc", "actorLineColor": "#64748b", "signalColor": "#cbd5e1", "signalTextColor": "#f8fafc", "labelBoxBkgColor": "#1e293b", "labelBoxBorderColor": "#94a3b8", "labelTextColor": "#f8fafc", "noteBkgColor": "#334155", "noteBorderColor": "#cbd5e1", "noteTextColor": "#f8fafc"}}}%%
 sequenceDiagram
     actor Controller as Kubernetes controller
     actor Cron as Kubernetes CronJob
@@ -158,43 +174,57 @@ sequenceDiagram
     participant S3 as S3 buckets
 
     Note over Controller,S3: INDEPENDENT BACKGROUND PROCESSING
-    rect rgb(242, 239, 229)
+    rect rgb(23, 32, 51)
         par DEPLOYMENT-MANAGED: match queue drain
-            Controller->>MatchWorker: Keep worker running
-            MatchWorker->>Queue: Claim and update rows
-            MatchWorker->>ND: Protected match request
-            ND->>Redis: Check admission and blocks
-            Redis-->>ND: Admit or reject
-            alt admitted locally
-                ND->>Riot: Request match data
-                Riot-->>ND: Match data or external 429
-                ND-->>MatchWorker: Result or exception
-                MatchWorker->>DB: Persist normalized match data
-                MatchWorker->>S3: Write match archive
-            else blocked locally
-                ND-->>MatchWorker: Internal rate-limit exception
+            rect rgb(30, 50, 78)
+                Controller->>MatchWorker: Keep worker running
+                MatchWorker->>Queue: Claim and update rows
+                MatchWorker->>ND: Protected match request
+                ND->>Redis: Check admission and blocks
+                Redis-->>ND: Admit or reject
+                alt admitted locally
+                    rect rgb(25, 76, 52)
+                        ND->>Riot: Request match data
+                        Riot-->>ND: Match data or external 429
+                        ND-->>MatchWorker: Result or exception
+                        MatchWorker->>DB: Persist normalized match data
+                        MatchWorker->>S3: Write match archive
+                    end
+                else blocked locally
+                    rect rgb(82, 69, 24)
+                        ND-->>MatchWorker: Internal rate-limit exception
+                    end
+                end
             end
         and DEPLOYMENT-MANAGED: ladder refresh
-            Controller->>LadderWorker: Keep worker running
-            LadderWorker->>ND: Protected ladder request
-            ND->>Redis: Check admission and blocks
-            Redis-->>ND: Admit or reject
-            alt admitted locally
-                ND->>Riot: Request ladder data
-                Riot-->>ND: Ladder data or external 429
-                ND-->>LadderWorker: Result or exception
-                LadderWorker->>DB: Persist ladder snapshot
-            else blocked locally
-                ND-->>LadderWorker: Internal rate-limit exception
+            rect rgb(30, 50, 78)
+                Controller->>LadderWorker: Keep worker running
+                LadderWorker->>ND: Protected ladder request
+                ND->>Redis: Check admission and blocks
+                Redis-->>ND: Admit or reject
+                alt admitted locally
+                    rect rgb(25, 76, 52)
+                        ND->>Riot: Request ladder data
+                        Riot-->>ND: Ladder data or external 429
+                        ND-->>LadderWorker: Result or exception
+                        LadderWorker->>DB: Persist ladder snapshot
+                    end
+                else blocked locally
+                    rect rgb(82, 69, 24)
+                        ND-->>LadderWorker: Internal rate-limit exception
+                    end
+                end
             end
         and CRONJOB-STARTED: catalog and analytics work
-            Cron->>Jobs: Start scheduled processing
-            Jobs->>CDragon: Read upstream catalog data
-            CDragon-->>Jobs: Catalog response
-            Jobs->>DDragon: Read upstream catalog data
-            DDragon-->>Jobs: Catalog response
-            Jobs->>DB: Write normalized data
-            Jobs->>S3: Write assets or published artifacts
+            rect rgb(30, 50, 78)
+                Cron->>Jobs: Start scheduled processing
+                Jobs->>CDragon: Read upstream catalog data
+                CDragon-->>Jobs: Catalog response
+                Jobs->>DDragon: Read upstream catalog data
+                DDragon-->>Jobs: Catalog response
+                Jobs->>DB: Write normalized data
+                Jobs->>S3: Write assets or published artifacts
+            end
         end
     end
 ```
