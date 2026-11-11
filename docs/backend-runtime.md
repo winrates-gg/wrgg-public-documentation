@@ -2,20 +2,10 @@
 
 ## Purpose
 
-At its core, WINRATES.GG is a cache in front of the Riot Games APIs for League of Legends that augments their payloads and implements product- and domain-specific patterns. The `backend` repository implements the primary ways WR.GG interacts with the Riot Games APIs. The React `frontend` integrates with this backend to hydrate the UI with the features and data users care about. The backend also defines how WR.GG interacts with supporting Riot and third-party services such as CommunityDragon, keeping the product current for a game that has received regular updates for many years. Much of the automatic upkeep code uses the same data models and patterns as the API, so that logic is defined and bundled here as well.
+At its core the WINRATES.GG (WR.GG) API, or `backend` implements a read-through cache that sits between UI application users and the various Riot Games APIs for League of Legends. WR.GG also augments Riot payloads and implements product- and domain-specific data ingesting, data cleaning, data normalization, data analysis, and data storage patterns. Beyond the core Riot APIs WR.GG also relies on with supporting Riot and third-party services such as Community Dragon which provide critical and ever-changing foundational information. Much of this automatic upkeep code uses the same data models and patterns as the API, so that logic is defined and bundled here as well.
 
 ## Primary Technology
-FastAPI Python web framework. FastAPI was selected when WR.GG was migrated out of Django because its async support and syntax were simpler for this workload. WR.GG relies on more than one million external API calls per day to operate its baseline product, so performance and simplicity made FastAPI attractive.
-
-It exposes the API used by the React
-application, protects outbound Riot API traffic, persists durable product
-facts, and runs the workers that turn external game data into searchable
-analytics.
-
-The backend repository owns the FastAPI source, database models and migrations,
-worker modules, the backend Docker build context, and publication of the API
-and worker image release. Kubernetes decides where those images run and how
-many workload replicas exist.
+The core API is written in the Python web framework FastAPI. FastAPI was selected when WR.GG was migrated out of Django because its async support and syntax were simpler for this workload. WR.GG relies on more than over 1 million external API calls per day to hydrate the baseline product, some of these calls happen concurrently inside the HTTP request-response cycle so the simplicity of FastAPI async path (endpoint) functions made it more attractive.
 
 The first diagram is the compact dependency view. The second is the broader
 system view: public delivery sits above the cloud and cluster platform, while
@@ -25,105 +15,190 @@ the backend runtime and its external dependencies sit below it.
 
 ```mermaid
 flowchart TB
-    Browser[Browser application]
-    API[FastAPI API]
-    Workers[Match, ladder, and maintenance workers]
+    Browser[Browser / End User]
+    API[FastAPI]
+    MatchWorker[Match queue workers]
+    LadderWorker[Ladder and player refresh workers]
+    ArchiveReconcile[Match archive reconciliation]
     Jobs[Scheduled data and analytics jobs]
+    Maintenance[Archive cleanup, SEO, and maintenance jobs]
+    Update{Update?}
+    Gate[New Destiny request gate]
     Redis[(Redis coordination state)]
+    Admission{Admitted?}
+    Block[Local request block]
+    RiotResponse[Riot response data]
     Postgres[(PostgreSQL product database)]
     Archives[(S3 match archives)]
+    Assets[(S3 assets and job workspace)]
     Riot[Riot API]
+    CommunityDragon[CommunityDragon]
+    DataDragon[Data Dragon]
 
-    Browser --> API
-    API --> Redis
-    API --> Postgres
-    API --> Riot
-    Workers --> Redis
-    Workers --> Postgres
-    Workers --> Archives
-    Workers --> Riot
+    Browser <--> API
+    API --> Update
+    Update -->|N| Postgres
+    Update -->|Y| Gate
+    MatchWorker --> Postgres
+    MatchWorker --> Archives
+    MatchWorker --> Gate
+    LadderWorker --> Postgres
+    LadderWorker --> Gate
+    ArchiveReconcile --> Postgres
+    ArchiveReconcile --> Archives
+    ArchiveReconcile --> Gate
     Jobs --> Postgres
-    Jobs --> Archives
-    Jobs --> Riot
+    Jobs --> Assets
+    Jobs <--> CommunityDragon
+    Jobs <--> DataDragon
+    Maintenance --> Postgres
+    Maintenance --> Archives
+    Gate <--> Redis
+    Gate --> Admission
+    Admission -->|Y| Riot
+    Admission -->|N| Block
+    Block --> Postgres
+    Riot --> RiotResponse
+    RiotResponse --> API
+    RiotResponse --> MatchWorker
+    RiotResponse --> LadderWorker
+    RiotResponse --> ArchiveReconcile
+    Postgres --> API
 
-    classDef delivery fill:#20262d,stroke:#5b9bd5,color:#f0f2f4
-    classDef runtime fill:#202a25,stroke:#6fb98f,color:#f0f2f4
-    classDef durable fill:#2a261c,stroke:#d6a84f,color:#f0f2f4
-    classDef external fill:#2b2020,stroke:#e07a7a,color:#f0f2f4
+    classDef user fill:#f2f2f2,stroke:#858585,color:#202020
+    classDef backend fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
+    classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
+    classDef external fill:#fde5e5,stroke:#c54b4b,color:#4a1717
 
-    class Browser delivery
-    class API,Workers,Jobs runtime
-    class Redis,Postgres,Archives durable
-    class Riot external
+    class Browser user
+    class API,MatchWorker,LadderWorker,ArchiveReconcile,Jobs,Maintenance,Update,Gate,Admission,Block,RiotResponse backend
+    class Redis,Postgres,Archives,Assets aws
+    class Riot,CommunityDragon,DataDragon external
 ```
 
-## Diagram: Backend By Concern
+Redis is a request-coordination dependency, not a requirement for every
+worker. The API, match queue workers, ladder refresh workers, and archive
+reconciliation use it through New Destiny when they make protected Riot
+requests. Asset refresh, analytics, archive cleanup, SEO, and partition jobs
+normally work against PostgreSQL, S3, or CommunityDragon without Redis.
+
+The browser is only one API caller. Match, ladder, and archive-reconciliation
+workers also enter the same New Destiny gate directly. Riot responses return to
+the relevant WRGG component, which then serves the API response or persists
+normalized data and archives.
+
+The read-through profile flow has an explicit `update: bool` control. When
+`update=False`, FastAPI reads the current durable state directly from
+PostgreSQL. When `update=True`, it enters the New Destiny and Riot path; the
+refreshed result is then returned to the API and persisted as product state
+where the route owns durable data.
+
+## Diagram: Backend By Initiator And Outcome
 
 ```mermaid
 flowchart TB
-    subgraph DELIVERY["PUBLIC DELIVERY"]
-        direction LR
-        Browser[Browser application]
-        CDN[CloudFront]
-        Site[(S3 public site)]
-        Ingress[API ingress]
+    Browser[End user / browser]
+    Deployments[Kubernetes Deployments]
+    CronJobs[Kubernetes CronJobs]
+    API[FastAPI API]
+    Update{Update?}
+    MatchQueue[(PostgreSQL: match_build_queue)]
+    MatchWorker[Match queue workers]
+    LadderWorker[Ladder and player refresh workers]
+    Jobs[Scheduled data and analytics jobs]
+    ArchiveReconcile[Match archive reconciliation]
+    Maintenance[Archive cleanup, SEO, and maintenance jobs]
 
-        Browser -->|loads frontend| CDN
-        CDN -->|origin| Site
-        Browser -->|API requests| Ingress
-    end
+    Gate[New Destiny request gate]
+    Redis[(Redis coordination state)]
+    Admission{Admitted?}
+    Block[Local request block]
+    Riot[Riot API]
+    RiotResponse[Riot response data]
+    Postgres[(PostgreSQL product data)]
+    Archives[(S3 match archives)]
+    Assets[(S3 assets and job workspace)]
+    PublicSite[(S3 public site and SEO artifacts)]
 
-    subgraph PLATFORM["CLOUD AND CLUSTER PLATFORM"]
-        direction LR
-        Cluster[K3s cluster and scheduler]
-    end
+    CommunityDragon[CommunityDragon]
+    DataDragon[Data Dragon]
 
-    subgraph RUNTIME["BACKEND RUNTIME"]
-        direction LR
-        API[FastAPI API]
-        Workers[Match, ladder, and maintenance workers]
-        Jobs[Scheduled data and analytics jobs]
-        Redis[(Redis coordination state)]
-        Postgres[(PostgreSQL product database)]
-        Archives[(S3 match archives)]
-        Riot[Riot API]
-        CommunityDragon[CommunityDragon]
+    Browser <--> API
+    API --> Update
+    Update -->|N| Postgres
+    Update -->|Y| Gate
+    MatchWorker <--> MatchQueue
+    CronJobs -.-> Jobs
+    CronJobs -.-> ArchiveReconcile
+    CronJobs -.-> Maintenance
+    Deployments -.-> MatchWorker
+    Deployments -.-> LadderWorker
 
-        API --> Redis
-        API --> Postgres
-        API --> Riot
-        Workers --> Redis
-        Workers --> Postgres
-        Workers --> Archives
-        Workers --> Riot
-        Jobs --> Postgres
-        Jobs --> Archives
-        Jobs --> Riot
-        Jobs --> CommunityDragon
-    end
+    MatchWorker --> Gate
+    LadderWorker --> Gate
+    ArchiveReconcile --> Gate
+    Gate <--> Redis
+    Gate --> Admission
+    Admission -->|Y| Riot
+    Admission -->|N| Block
+    Block --> Postgres
+    Riot --> RiotResponse
+    RiotResponse --> API
+    RiotResponse --> MatchWorker
+    RiotResponse --> LadderWorker
+    RiotResponse --> ArchiveReconcile
 
-    Ingress --> API
-    Cluster -. schedules .-> API
-    Cluster -. schedules .-> Workers
-    Cluster -. schedules .-> Jobs
-    Cluster -. hosts .-> Redis
+    Postgres --> API
+    MatchWorker --> Postgres
+    MatchWorker --> Archives
+    LadderWorker --> Postgres
+    Jobs --> Postgres
+    Jobs --> Assets
+    ArchiveReconcile --> Postgres
+    ArchiveReconcile --> Archives
+    Maintenance --> Postgres
+    Maintenance --> Archives
+    Maintenance --> PublicSite
+    Jobs <--> CommunityDragon
+    Jobs <--> DataDragon
 
-    classDef delivery fill:#20262d,stroke:#5b9bd5,color:#f0f2f4
-    classDef platform fill:#24282d,stroke:#9aa7b5,color:#f0f2f4
-    classDef runtime fill:#202a25,stroke:#6fb98f,color:#f0f2f4
-    classDef durable fill:#2a261c,stroke:#d6a84f,color:#f0f2f4
-    classDef external fill:#2b2020,stroke:#e07a7a,color:#f0f2f4
+    classDef user fill:#f2f2f2,stroke:#858585,color:#202020
+    classDef platform fill:#f2f2f2,stroke:#858585,color:#202020
+    classDef backend fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
+    classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
+    classDef external fill:#fde5e5,stroke:#c54b4b,color:#4a1717
 
-    class Browser,CDN,Site,Ingress delivery
-    class Cluster platform
-    class API,Workers,Jobs runtime
-    class Redis,Postgres,Archives durable
-    class Riot,CommunityDragon external
-
-    style DELIVERY fill:#10161d,stroke:#5b9bd5,stroke-width:2px
-    style PLATFORM fill:#14181d,stroke:#9aa7b5,stroke-width:2px
-    style RUNTIME fill:#111a15,stroke:#6fb98f,stroke-width:2px
+    class Browser user
+    class Deployments,CronJobs platform
+    class API,MatchWorker,LadderWorker,Jobs,ArchiveReconcile,Maintenance,Update,Gate,Admission,Block,RiotResponse backend
+    class MatchQueue,Redis,Postgres,Archives,Assets,PublicSite aws
+    class Riot,CommunityDragon,DataDragon external
 ```
+
+The diagram starts with the source of work rather than treating every request
+as browser traffic. On an update, FastAPI gets current Riot data through New
+Destiny, compares the returned Match-V5 IDs with durable data, and writes the
+missing IDs to `match_build_queue`. The match workers do not get launched by that table; the
+Kubernetes Deployments keep them alive and they claim and update queue rows.
+Kubernetes CronJobs are a peer workload type that creates scheduled refresh,
+reconciliation, cleanup, or SEO jobs. Those processors then update PostgreSQL,
+S3 archives, S3 assets or job workspace, and the public site as appropriate.
+CommunityDragon and Data Dragon are upstream inputs to scheduled processing;
+they are not terminal branches. The jobs consume their catalog data and write
+the resulting normalized records to PostgreSQL and the relevant S3 buckets.
+
+The `MatchBuildQueue` table is shown separately because it has a distinct
+operational contract: FastAPI writes discovered missing match IDs, and match
+workers claim, retry, complete, or skip those rows. It still lives in the same
+PostgreSQL database as the product data; it is not a separate queue service.
+
+The arrows distinguish interaction from persistence. A bidirectional arrow
+means a component calls a dependency and receives a response, so the jobs call
+CommunityDragon and Data Dragon and then write their normalized outputs to
+PostgreSQL or S3. A one-way arrow into storage represents a write or fallback
+read path. New Destiny consults Redis while deciding admission; if the request
+is rejected, the API does not call Riot and its rate-limit handler reads the
+existing product state from PostgreSQL for the response.
 
 ## Core API
 
