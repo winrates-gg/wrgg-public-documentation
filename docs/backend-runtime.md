@@ -7,160 +7,63 @@ At its core the WINRATES.GG (WR.GG) API, or `backend` implements a read-through 
 ## Primary Technology
 The core API is written in the Python web framework FastAPI. FastAPI was selected when WR.GG was migrated out of Django because its async support and syntax were simpler for this workload. WR.GG relies on more than over 1 million external API calls per day to hydrate the baseline product, some of these calls happen concurrently inside the HTTP request-response cycle so the simplicity of FastAPI async path (endpoint) functions made it more attractive.
 
-The first diagram is the compact dependency view. The second is the broader
-system view: public delivery sits above the cloud and cluster platform, while
-the backend runtime and its external dependencies sit below it.
 
-## Diagram: Backend Runtime
+## Portfolio Architecture Views
 
-```mermaid
-flowchart TB
-    Browser[Browser / End User]
-    API[FastAPI]
-    MatchWorker[Match queue workers]
-    LadderWorker[Ladder and player refresh workers]
-    ArchiveReconcile[Match archive reconciliation]
-    Jobs[Scheduled data and analytics jobs]
-    Maintenance[Archive cleanup, SEO, and maintenance jobs]
-    Update{Update?}
-    Gate[New Destiny request gate]
-    Redis[(Redis coordination state)]
-    Admission{Admitted?}
-    Block[Local request block]
-    RiotResponse[Riot response data]
-    Postgres[(PostgreSQL product database)]
-    Archives[(S3 match archives)]
-    Assets[(S3 assets and job workspace)]
-    Riot[Riot API]
-    CommunityDragon[CommunityDragon]
-    DataDragon[Data Dragon]
+The following three views separate runtime context from request sequencing and
+background ingestion so that each diagram answers one architectural question.
 
-    Browser <--> API
-    API --> Update
-    Update -->|N| Postgres
-    Update -->|Y| Gate
-    MatchWorker --> Postgres
-    MatchWorker --> Archives
-    MatchWorker --> Gate
-    LadderWorker --> Postgres
-    LadderWorker --> Gate
-    ArchiveReconcile --> Postgres
-    ArchiveReconcile --> Archives
-    ArchiveReconcile --> Gate
-    Jobs --> Postgres
-    Jobs --> Assets
-    Jobs <--> CommunityDragon
-    Jobs <--> DataDragon
-    Maintenance --> Postgres
-    Maintenance --> Archives
-    Gate <--> Redis
-    Gate --> Admission
-    Admission -->|Y| Riot
-    Admission -->|N| Block
-    Block --> Postgres
-    Riot --> RiotResponse
-    RiotResponse --> API
-    RiotResponse --> MatchWorker
-    RiotResponse --> LadderWorker
-    RiotResponse --> ArchiveReconcile
-    Postgres --> API
+### Diagram: Runtime Topology And Boundaries
 
-    classDef user fill:#f2f2f2,stroke:#858585,color:#202020
-    classDef backend fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
-    classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
-    classDef external fill:#fde5e5,stroke:#c54b4b,color:#4a1717
-
-    class Browser user
-    class API,MatchWorker,LadderWorker,ArchiveReconcile,Jobs,Maintenance,Update,Gate,Admission,Block,RiotResponse backend
-    class Redis,Postgres,Archives,Assets aws
-    class Riot,CommunityDragon,DataDragon external
-```
-
-Redis is a request-coordination dependency, not a requirement for every
-worker. The API, match queue workers, ladder refresh workers, and archive
-reconciliation use it through New Destiny when they make protected Riot
-requests. Asset refresh, analytics, archive cleanup, SEO, and partition jobs
-normally work against PostgreSQL, S3, or CommunityDragon without Redis.
-
-The browser is only one API caller. Match, ladder, and archive-reconciliation
-workers also enter the same New Destiny gate directly. Riot responses return to
-the relevant WRGG component, which then serves the API response or persists
-normalized data and archives.
-
-The read-through profile flow has an explicit `update: bool` control. When
-`update=False`, FastAPI reads the current durable state directly from
-PostgreSQL. When `update=True`, it enters the New Destiny and Riot path; the
-refreshed result is then returned to the API and persisted as product state
-where the route owns durable data.
-
-## Diagram: Backend By Initiator And Outcome
+This is a context view. The arrows show component relationships, not one
+specific request's full execution order.
 
 ```mermaid
-flowchart TB
-    Browser[End user / browser]
+flowchart LR
+    Browser[Browser / end user]
+    CloudFront[CloudFront]
+    PublicSite[(S3 public frontend)]
+    APIIngress[API ingress]
+    API[FastAPI API]
     Deployments[Kubernetes Deployments]
     CronJobs[Kubernetes CronJobs]
-    API[FastAPI API]
-    Update{Update?}
-    MatchQueue[(PostgreSQL: match_build_queue)]
     MatchWorker[Match queue workers]
-    LadderWorker[Ladder and player refresh workers]
-    Jobs[Scheduled data and analytics jobs]
-    ArchiveReconcile[Match archive reconciliation]
-    Maintenance[Archive cleanup, SEO, and maintenance jobs]
-
-    Gate[New Destiny request gate]
+    LadderWorker[Ladder and refresh workers]
+    Jobs[Scheduled data and maintenance jobs]
+    NewDestiny[New Destiny]
     Redis[(Redis coordination state)]
-    Admission{Admitted?}
-    Block[Local request block]
-    Riot[Riot API]
-    RiotResponse[Riot response data]
     Postgres[(PostgreSQL product data)]
     Archives[(S3 match archives)]
-    Assets[(S3 assets and job workspace)]
-    PublicSite[(S3 public site and SEO artifacts)]
-
+    Assets[(S3 assets and published artifacts)]
+    Riot[Riot API]
     CommunityDragon[CommunityDragon]
     DataDragon[Data Dragon]
 
-    Browser <--> API
-    API --> Update
-    Update -->|N| Postgres
-    Update -->|Y| Gate
-    MatchWorker <--> MatchQueue
-    CronJobs -.-> Jobs
-    CronJobs -.-> ArchiveReconcile
-    CronJobs -.-> Maintenance
+    Browser --> CloudFront
+    CloudFront --> PublicSite
+    Browser --> APIIngress
+    APIIngress --> API
+
+    Deployments -.-> API
     Deployments -.-> MatchWorker
     Deployments -.-> LadderWorker
+    CronJobs -.-> Jobs
 
-    MatchWorker --> Gate
-    LadderWorker --> Gate
-    ArchiveReconcile --> Gate
-    Gate <--> Redis
-    Gate --> Admission
-    Admission -->|Y| Riot
-    Admission -->|N| Block
-    Block --> Postgres
-    Riot --> RiotResponse
-    RiotResponse --> API
-    RiotResponse --> MatchWorker
-    RiotResponse --> LadderWorker
-    RiotResponse --> ArchiveReconcile
+    API <--> NewDestiny
+    MatchWorker <--> NewDestiny
+    LadderWorker <--> NewDestiny
+    NewDestiny <--> Redis
+    NewDestiny <--> Riot
 
-    Postgres --> API
-    MatchWorker --> Postgres
+    API <--> Postgres
+    MatchWorker <--> Postgres
     MatchWorker --> Archives
     LadderWorker --> Postgres
-    Jobs --> Postgres
-    Jobs --> Assets
-    ArchiveReconcile --> Postgres
-    ArchiveReconcile --> Archives
-    Maintenance --> Postgres
-    Maintenance --> Archives
-    Maintenance --> PublicSite
     Jobs <--> CommunityDragon
     Jobs <--> DataDragon
+    Jobs --> Postgres
+    Jobs --> Assets
+    Jobs --> Archives
 
     classDef user fill:#f2f2f2,stroke:#858585,color:#202020
     classDef platform fill:#f2f2f2,stroke:#858585,color:#202020
@@ -170,35 +73,137 @@ flowchart TB
 
     class Browser user
     class Deployments,CronJobs platform
-    class API,MatchWorker,LadderWorker,Jobs,ArchiveReconcile,Maintenance,Update,Gate,Admission,Block,RiotResponse backend
-    class MatchQueue,Redis,Postgres,Archives,Assets,PublicSite aws
+    class API,APIIngress,MatchWorker,LadderWorker,Jobs,NewDestiny backend
+    class CloudFront,PublicSite,Redis,Postgres,Archives,Assets aws
     class Riot,CommunityDragon,DataDragon external
 ```
 
-The diagram starts with the source of work rather than treating every request
-as browser traffic. On an update, FastAPI gets current Riot data through New
-Destiny, compares the returned Match-V5 IDs with durable data, and writes the
-missing IDs to `match_build_queue`. The match workers do not get launched by that table; the
-Kubernetes Deployments keep them alive and they claim and update queue rows.
-Kubernetes CronJobs are a peer workload type that creates scheduled refresh,
-reconciliation, cleanup, or SEO jobs. Those processors then update PostgreSQL,
-S3 archives, S3 assets or job workspace, and the public site as appropriate.
-CommunityDragon and Data Dragon are upstream inputs to scheduled processing;
-they are not terminal branches. The jobs consume their catalog data and write
-the resulting normalized records to PostgreSQL and the relevant S3 buckets.
+This view establishes the major boundaries: public delivery, cluster workload
+execution, protected Riot access, coordination state, and durable outputs. It
+intentionally does not explain `update`, stale fallback, queue admission, or
+individual response paths.
 
-The `MatchBuildQueue` table is shown separately because it has a distinct
-operational contract: FastAPI writes discovered missing match IDs, and match
-workers claim, retry, complete, or skip those rows. It still lives in the same
-PostgreSQL database as the product data; it is not a separate queue service.
+### Diagram: Synchronous API Flow
 
-The arrows distinguish interaction from persistence. A bidirectional arrow
-means a component calls a dependency and receives a response, so the jobs call
-CommunityDragon and Data Dragon and then write their normalized outputs to
-PostgreSQL or S3. A one-way arrow into storage represents a write or fallback
-read path. New Destiny consults Redis while deciding admission; if the request
-is rejected, the API does not call Riot and its rate-limit handler reads the
-existing product state from PostgreSQL for the response.
+This sequence view is initiated by the browser. Read each section from top to
+bottom. `alt` means that exactly one branch occurs; the shaded blocks make the
+alternative request modes and outcomes explicit.
+
+```mermaid
+sequenceDiagram
+    actor User as Browser / user
+    participant API as FastAPI
+    participant ND as New Destiny
+    participant Redis as Redis
+    participant Riot as Riot API
+    participant DB as PostgreSQL
+    participant Queue as match_build_queue
+
+    Note over User,Queue: SYNCHRONOUS USER REQUEST
+    rect rgb(232, 240, 248)
+        alt ALTERNATIVE: update=False
+            User->>API: Request existing profile
+            API->>DB: Read durable state
+            DB-->>API: Existing profile data
+            API-->>User: Current stored response
+        else ALTERNATIVE: update=True
+            User->>API: Request refresh
+            API->>ND: Protected Riot request
+            ND->>Redis: Preflight admission
+            Redis-->>ND: Admit or block
+
+            alt OUTCOME: admitted
+                ND->>Riot: Riot API request(s)
+                Riot-->>ND: Fresh Riot data
+                ND-->>API: Fresh result
+                API->>DB: Persist refreshed profile state
+                API->>Queue: Enqueue missing match IDs
+                API-->>User: Fresh profile response
+            else OUTCOME: internally blocked
+                ND-->>API: Rate-limit exception
+                API->>DB: Read existing profile state
+                DB-->>API: Stale profile data
+                API-->>User: Cached/partial response and retry-after
+            end
+        end
+    end
+```
+
+The stale-data branch is owned by FastAPI, not New Destiny: New Destiny uses
+Redis to make the admission decision and raises the exception; the API handler
+then reads PostgreSQL and decides what response the user receives. If no
+minimum durable profile exists, the API returns the initial-build failure
+instead of a stale response.
+
+### Diagram: Background Processing Flow
+
+This sequence view has two kinds of initiator. The Kubernetes controller keeps
+long-running worker Deployments alive; Kubernetes CronJobs start finite
+scheduled jobs. These paths do not require a browser request.
+
+```mermaid
+sequenceDiagram
+    actor Controller as Kubernetes controller
+    actor Cron as Kubernetes CronJob
+    participant MatchWorker as Match worker
+    participant Queue as match_build_queue
+    participant LadderWorker as Ladder worker
+    participant Jobs as Scheduled jobs
+    participant ND as New Destiny
+    participant Redis as Redis
+    participant Riot as Riot API
+    participant DB as PostgreSQL
+    participant CDragon as CommunityDragon
+    participant DDragon as Data Dragon
+    participant S3 as S3 buckets
+
+    Note over Controller,S3: INDEPENDENT BACKGROUND PROCESSING
+    rect rgb(242, 239, 229)
+        par DEPLOYMENT-MANAGED: match queue drain
+            Controller->>MatchWorker: Keep worker running
+            MatchWorker->>Queue: Claim and update rows
+            MatchWorker->>ND: Protected match request
+            ND->>Redis: Check admission and blocks
+            Redis-->>ND: Admit or reject
+            alt admitted locally
+                ND->>Riot: Request match data
+                Riot-->>ND: Match data or external 429
+                ND-->>MatchWorker: Result or exception
+                MatchWorker->>DB: Persist normalized match data
+                MatchWorker->>S3: Write match archive
+            else blocked locally
+                ND-->>MatchWorker: Internal rate-limit exception
+            end
+        and DEPLOYMENT-MANAGED: ladder refresh
+            Controller->>LadderWorker: Keep worker running
+            LadderWorker->>ND: Protected ladder request
+            ND->>Redis: Check admission and blocks
+            Redis-->>ND: Admit or reject
+            alt admitted locally
+                ND->>Riot: Request ladder data
+                Riot-->>ND: Ladder data or external 429
+                ND-->>LadderWorker: Result or exception
+                LadderWorker->>DB: Persist ladder snapshot
+            else blocked locally
+                ND-->>LadderWorker: Internal rate-limit exception
+            end
+        and CRONJOB-STARTED: catalog and analytics work
+            Cron->>Jobs: Start scheduled processing
+            Jobs->>CDragon: Read upstream catalog data
+            CDragon-->>Jobs: Catalog response
+            Jobs->>DDragon: Read upstream catalog data
+            DDragon-->>Jobs: Catalog response
+            Jobs->>DB: Write normalized data
+            Jobs->>S3: Write assets or published artifacts
+        end
+    end
+```
+
+The queue is the handoff between request-driven discovery and asynchronous
+match processing. The controller keeps the worker alive but does not drain the
+queue itself. CronJobs independently start scheduled work; those jobs consume
+CommunityDragon and Data Dragon inputs and write normalized results to
+PostgreSQL or S3.
 
 ## Core API
 
