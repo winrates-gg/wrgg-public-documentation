@@ -100,11 +100,24 @@ erDiagram
   observations related to champion performance, itemization outcomes, matchups, synergies,
   scaling, and more. `CHAMPION_ANALYTICS` is an illustrative catch all term for that that family of derived analytics. It is not a literal table.
 
+### Primary API Endpoints
+
+The primary public endpoints users interact with:
+
+| Concern | Endpoints | Description |
+| --- | --- | --- |
+| Player profiles | `/summoner/`, `/summoner-search/` | Resolve Display Names, build profiles, expose match history, and request fresh relevant data |
+| Champion and player discovery | `/champion-search/`, `/champions/`, `/leaderboards/champion-players/` | Search champions and find players associated with them |
+| Champion analytics | `/analytics/champion-tier-list/`, `/analytics/champion-performance/`, `/analytics/champion-item-builds/`, `/analytics/champion-runes/`, `/analytics/champion-keystones/` | Serve win rates, builds, runes, matchups, scaling, and performance analysis |
+| Champion context | `/analytics/champion-metadata/`, `/analytics/champion-context/`, `/analytics/champion-evolution-paths/`, `/analytics/champion-transformations/` | Supply patch, role, evolution, transformation, and product-specific context |
+| Ladders and mastery | `/ladder/`, `/leaderboards/mastery/` | Serve ranked ladder snapshots and mastery leaderboards |
+| Live games | `/live-game/` | Resolve and describe an active game when one exists |
+
 
 ## Runtime Context
 
 ### Diagram: Runtime Topology And Boundaries
-
+This diagram outlines the major conceptual boundaries with an emphasis on the main integration points for the backed concern: public delivery, cluster workload, Riot API access & rate limiting, data persistence, and durable artifacts. See the [cluster documentation](kubernetes-delivery.md) for detailed and more representative clsuter design.
 ```mermaid
 flowchart LR
     Browser[Browser / UI User]
@@ -167,11 +180,37 @@ flowchart LR
     class Riot,CommunityDragon,DataDragon external
 ```
 
-This diagram outlines the major conceptual boundaries with an emphasis on the main integration points for the backed concern: public delivery, cluster workload, Riot API access & rate limiting, data persistence, and durable artifacts. See the cluster documentation for detailed and more representative clsuter design. [NOTE, link here]
-
 ## Core API Functionality
 
 The core function of the FastAPI API is to serve response to synchronous, browser-originating HTTP requests.  FastAPI validates requests, considers data freshness requirements & either appropriately serves stale data or seek fresh data, coordinates shared rate limit status through Redis, and uses rate limit aware Riot API requests when the freshest most current data is required.
+
+### YOU ARE HERE - Inside the Runtime Topology And Boundaries Diagram
+
+This is the portion of the integrated backend covered by the Core API section.
+FastAPI and New Destiny are the application path; PostgreSQL, Redis, and the
+Riot API are the boundaries that path reads, coordinates through, or calls.
+
+```mermaid
+flowchart LR
+    FastAPI[FastAPI]
+    NewDestiny[New Destiny]
+    Postgres[(PostgreSQL)]
+    Redis[(Redis)]
+    Riot[Riot API]
+
+    FastAPI <--> NewDestiny
+    FastAPI <--> Postgres
+    NewDestiny <--> Redis
+    NewDestiny <--> Riot
+
+    classDef core fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
+    classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
+    classDef external fill:#fde5e5,stroke:#c54b4b,color:#4a1717
+
+    class FastAPI,NewDestiny core
+    class Postgres,Redis aws
+    class Riot external
+```
 
 ### Diagram: Synchronous API Flow
 
@@ -236,92 +275,28 @@ sequenceDiagram
     end
 ```
 
-The stale-data branch is owned by FastAPI, not New Destiny: New Destiny uses
-Redis to make the admission decision and raises the exception; the API handler
-then reads PostgreSQL and decides what response the user receives. If no
-minimum durable profile exists, the API returns `424 Failed Dependency` instead
-of a stale response. In this route, `424` means the dependent Riot request was
-rate limited before the application had enough persisted state to serve the
-profile; it is not a generic `428 Precondition Required` response.
-
-The API uses a read-through pattern for current player data. A profile can be
-served from the latest durable record, or refreshed from Riot when the request
-requires an authoritative update. In the profile route, a durable read is
-returned with the WRGG contract status `203`; a successful fresh build is
-returned with `201`. Players can request a refresh when their profile has not
-otherwise been updated by background work. The current profile record includes
-mutable facts such as the Riot ID, profile icon, level, and ranked overview.
-
-Match history follows a different lifecycle. The current state of a player can
-change frequently, but the outcome and participant facts for a completed match
-such as `NA1_5676149852` should not change. The API therefore serves existing
-match history and analytics from durable state, while missing match data can be
-recorded for asynchronous ingestion. This keeps request latency separate from
-the work of fetching, archiving, normalizing, and analyzing matches.
-
-The API is deliberately not responsible for completing every expensive piece
-of work before responding. When a request requires match ingestion or another
-long-running update, it can return the best available profile or analytics
-state while recording work for the worker system to complete.
-
-### Data Lifecycle And Persistence
-
-PostgreSQL is the main structured product persistence boundary. S3 provides
-durable object storage for match archives and published static artifacts. Redis
-is shared coordination state: it supports request admission, temporary
-rate-limit blocks, queue and dashboard observations, and other short-lived
-coordination. It is not the durable product database.
-
-The backend generally follows this lifecycle:
-
-1. A request resolves the relevant platform, player, champion, patch, tier, and
-   role context.
-2. The API reads the best available durable record and determines whether the
-   request can be satisfied immediately or needs fresh external data.
-3. Outbound Riot Request Determineds and worker jobs obtain external data when required.
-4. Match archives are retained in S3, while normalized entities and derived
-   analytics are written to PostgreSQL for product queries.
-5. A later API request reads the persisted result instead of repeating the
-   entire external fetch.
-
-The resulting system is intentionally mixed: current identity/profile state is
-refreshed, completed match facts are retained, and analytics are recomputed or
-published from those durable facts as the relevant patch and cohort data change.
-
-### Primary API Surface
-
-The public endpoints are organized around the product concepts users navigate:
-
-| Product concern | Representative endpoint families | Responsibility |
-| --- | --- | --- |
-| Player profiles | `/summoner/`, `/summoner-search/` | Resolve Riot IDs, build profiles, expose match history, and request freshness work |
-| Champion and player discovery | `/champion-search/`, `/champions/`, `/leaderboards/champion-players/` | Search champions and find players associated with them |
-| Champion analytics | `/analytics/champion-tier-list/`, `/analytics/champion-performance/`, `/analytics/champion-item-builds/`, `/analytics/champion-runes/`, `/analytics/champion-keystones/` | Serve win rates, builds, runes, matchups, scaling, and performance analysis |
-| Champion context | `/analytics/champion-metadata/`, `/analytics/champion-context/`, `/analytics/champion-evolution-paths/`, `/analytics/champion-transformations/` | Supply patch, role, evolution, transformation, and product-specific context |
-| Ladders and mastery | `/ladder/`, `/leaderboards/mastery/` | Serve ranked ladder snapshots and mastery leaderboards |
-| Live games | `/live-game/` | Resolve and describe an active game when one exists |
-
-The health and capability routes support runtime checks, while the SEO report
-manifest supports static publication. The private dashboard API is a separate
-dashboard-only runtime and is not part of the public product API surface.
-
 ### New Destiny And Rate Limiting
 
-New Destiny is a separately packaged request-protection library, but its
-integration was purpose-built around WRGG's operating pattern: a high volume
-of Riot API calls produced by the API, match workers, ladder refresh, and
-scheduled jobs. A per-process limiter would not coordinate those callers, so
-WRGG uses a shared Redis-backed model.
+New Destiny is a separately packaged open source library and rate limiting solution for the Riot API with over 1,500 downloads (without mirrors) on [PyPI](https://pypi.org/project/new-destiny/). It was created by Victor Haynes as an unopinionated, flexible, scalable, and low mainteance solution to solve the primary pain point of 3rd party Riot developers. See the [New Destiny documentation](https://github.com/victorhaynes/new-destiny) for more detail. Riot has extensive rules on their API usage and all officially approved & production-minded League of Legeneds integrations must respect their rules. This was created to solve my own problem but also to provide a free solution to the buzzing officially unofficial 3rd party Riot Dev community.
 
-For each protected request, New Destiny can:
+You drop in a properly formatted URL (a Riot API endpoint with appropriate headers and URL params) and New Destiny does the rest:
 
-- atomically admit or reject the request before it reaches Riot;
-- model application, service, and method limits by Riot routing value;
-- share temporary blocks between API workers and background workers;
-- distinguish an internal preflight block from an external Riot throttle;
-- respect Riot's retry timing and record the outcome for operations;
-- expose low-cardinality and request-level metrics without becoming the
-  application's durable data store.
+- atomically admits or rejects the request before it reaches Riot;
+- scopes individual requests down to the rate limiters that apply to it;
+- works with or without concurrent callers;
+- models application, service, and method limits across Riot services and
+  endpoints by routing value;
+- respects global blocks, unplanned outages, and transient outages, and can
+  parse and respect blocks with many different scopes;
+- operates on a "Respect first" principle: it blocks a request that would
+  trigger a known violation instead of waiting for Riot to reject it;
+- can add protective fallback blocks for unexplained cases and legitimate
+  leakage or out-of-sync scenarios;
+- uses Riot's retry timing when it is available and records the outcome for
+  operations;
+- can expose low-cardinality and request-level metrics allowing user-driven analytics.
+
+  Read more of the documentation and finer details on [PyPI](https://pypi.org/project/new-destiny/).
 
 ```mermaid
 flowchart LR
@@ -344,6 +319,37 @@ observe every implementation detail of Riot's counters. A small amount of
 bounded mismatch is therefore possible even with normal configuration. The
 important design property is that internal and external enforcement remain
 visible and that all callers share the same protective posture.
+
+### Data Lifecycle And Persistence
+
+The backend deliberately separates durable product data from shared runtime
+coordination:
+
+- **PostgreSQL** is the durable storage layer for structured relational data,
+  including profiles, matches, normalized entities, queue rows, snapshots, and
+  derived analytics.
+- **S3** provides durable object storage for compressed JSON match archives,
+  assets, and published static artifacts.
+- **Redis** is shared coordination state and is deeply integrated with New
+  Destiny, the purpose-built Riot API rate-limiting package authored for WRGG.
+  
+
+The backend generally follows this lifecycle:
+
+1. A request or worker resolves the relevant platform, player, champion, patch,
+   tier, and role context.
+2. The API or worker reads the best available durable state from PostgreSQL.
+3. If fresh external data is needed, New Destiny uses Redis to coordinate
+   admission before the caller reaches Riot.
+4. Successful external data is normalized into PostgreSQL, while match archives
+   and published artifacts are written to S3.
+5. Later requests read the persisted result instead of repeating the entire
+   external fetch.
+
+The resulting system is intentionally mixed: current identity and profile state
+can be refreshed, completed match facts are retained, and analytics are
+recomputed or published from durable facts as the relevant patch and cohort data
+change.
 
 ## Background Processing
 
