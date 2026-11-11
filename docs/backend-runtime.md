@@ -20,10 +20,11 @@ specific request's full execution order.
 
 ```mermaid
 flowchart LR
-    Browser[Browser / end user]
-    CloudFront[CloudFront]
-    PublicSite[(S3 public frontend)]
-    APIIngress[API ingress]
+    Browser[Browser / UI User]
+    CloudFront[CloudFront CDN]
+    APICloudFront[CloudFront API CDN]
+    PublicSite[(S3 React Build)]
+    APIIngress[K3S Cluster Ingress]
     API[FastAPI API]
     Deployments[Kubernetes Deployments]
     CronJobs[Kubernetes CronJobs]
@@ -41,7 +42,8 @@ flowchart LR
 
     Browser --> CloudFront
     CloudFront --> PublicSite
-    Browser --> APIIngress
+    Browser --> APICloudFront
+    APICloudFront --> APIIngress
     APIIngress --> API
 
     Deployments -.-> API
@@ -72,9 +74,9 @@ flowchart LR
     classDef external fill:#fde5e5,stroke:#c54b4b,color:#4a1717
 
     class Browser user
-    class Deployments,CronJobs platform
-    class API,APIIngress,MatchWorker,LadderWorker,Jobs,NewDestiny backend
-    class CloudFront,PublicSite,Redis,Postgres,Archives,Assets aws
+    class Deployments,CronJobs,APIIngress platform
+    class API,MatchWorker,LadderWorker,Jobs,NewDestiny backend
+    class CloudFront,APICloudFront,PublicSite,Redis,Postgres,Archives,Assets aws
     class Riot,CommunityDragon,DataDragon external
 ```
 
