@@ -2,14 +2,14 @@
 
 ## High Level Overview
 
-At its core the WINRATES.GG (WR.GG) API, or `backend` implements a read-through cache that sits between UI application users and the various Riot Games APIs for League of Legends. WR.GG also augments Riot payloads and implements product- and domain-specific data ingesting, data cleaning, data normalization, data analysis, and data storage patterns. Beyond the core Riot APIs WR.GG also relies on with supporting Riot and third-party services such as Community Dragon which provide critical and ever-changing foundational information. Much of this automatic upkeep code uses the same data models and patterns as the API, so that logic is defined and bundled here as well.
+At its core, the WINRATES.GG (WR.GG) API, or `backend`, implements a read-through cache that sits between UI application users and the various Riot Games APIs for League of Legends. WR.GG also augments Riot payloads and implements product- and domain-specific data ingestion, data cleaning, data normalization, data analysis, and data storage patterns. Beyond the core Riot APIs, WR.GG also relies on supporting Riot and third-party services such as Community Dragon, which provide critical and ever-changing foundational information. Much of this automated upkeep code uses the same data models and patterns as the API, so that logic is defined and bundled here as well.
 
 ## Primary Technology
 The core API is written in the Python web framework FastAPI. FastAPI was selected when WR.GG was migrated out of Django because its async support and syntax were simpler for this workload. WR.GG relies on more than over 1 million external API calls per day to hydrate the baseline product, some of these calls happen concurrently inside the HTTP request-response cycle so the simplicity of FastAPI async path (endpoint) functions made it more attractive.
 
 ## Core Data Model
 
-WR.GG uses a larger schema than what is shown, over 50 entities in production, but the below entity relationship diagram (ERD) covers the most important part of WR.GG's data model. The design of your application's data model is one of the primary tasks of a 3rd party League of Legends developer. Some of these relationships are implied by the shape Riot API payloads while others are domain specific and must be implemented by the developer.
+WR.GG uses a larger schema than what is shown, with over 50 entities in production, but the entity relationship diagram (ERD) below covers the most important part of WR.GG's data model. The design of your application's data model is one of the primary tasks of a third-party League of Legends developer. Some of these relationships are implied by the shape of Riot API payloads, while others are domain-specific and must be implemented by the developer.
 
 ```mermaid
 erDiagram
@@ -87,18 +87,18 @@ erDiagram
 ### Domain Concepts
 
 - `Summoner` represents a "player" or a Riot Account registered on a platform. It is identified by a Riot PUUID (Player Universally Unique Identifier) together with the platform
-  code, rather than by a user-facing display name. Display names can change, are not fully unique and accounts can be transferred between platforms so the PUUID + platform code make up the composite primary key.
-- `Platform` is what players coloquially call a server: `na1` is North America,
-  `kr` is Korea, and `euw1` is Europe West etc.
+  code, rather than by a user-facing display name. Display names can change, are not fully unique, and accounts can be transferred between platforms, so the PUUID + platform code make up the composite primary key.
+- `Platform` is what players colloquially call a server: `na1` is North America,
+  `kr` is Korea, and `euw1` is Europe West, etc.
 - `Region` groups related platforms;
   for example, the `americas` region spans North America, Brazil,
   Latin America North, and Latin America South.
-- `Match` records single game instances. Completion status distinguishes usable completed games from remakes, terminated games, and unprocessable games.
-- `SummonerMatch` is the through table for the many-to-many reationship between Summoners and Matches. It also stores participant-specific dimmensions such as champions played, role selected, and performance.
-- `Champion`, `GameMode`, `Patch`, `Tier`, and `Role` are shared dimensions that start to enable some of the fundamental query patterns WR.GG supports (i.e. "What is the win rate of Brand Support on this current patch in Diamond Elo?")
+- `Match` records individual game instances. Completion status distinguishes usable completed games from remakes, terminated games, unexpected or malformed payloads, and unknown historical records.
+- `SummonerMatch` is the through table for the many-to-many relationship between Summoners and Matches. It also stores participant-specific dimensions such as champions played, role selected, and performance.
+- `Champion`, `GameMode`, `Patch`, `Tier`, and `Role` are shared dimensions that help enable some of the fundamental query patterns WR.GG supports (i.e. "What is the win rate of Brand Support on this current patch in Diamond Elo?")
 - The many analytics tables reuse those dimensions to store product-specific
   observations related to champion performance, itemization outcomes, matchups, synergies,
-  scaling, and more. `CHAMPION_ANALYTICS` is an illustrative catch all term for that that family of derived analytics. It is not a literal table.
+  scaling, and more. `CHAMPION_ANALYTICS` is an illustrative catch-all term for that family of derived analytics. It is not a literal table.
 
 ### Primary API Endpoints
 
@@ -106,7 +106,7 @@ The primary public endpoints users interact with:
 
 | Concern | Endpoints | Description |
 | --- | --- | --- |
-| Player profiles | `/summoner/`, `/summoner-search/` | Resolve Display Names, build profiles, expose match history, and request fresh relevant data |
+| Player profiles | `/summoner/`, `/summoner-search/` | Resolve display names, build profiles, expose match history, and request fresh data when needed |
 | Champion and player discovery | `/champion-search/`, `/champions/`, `/leaderboards/champion-players/` | Search champions and find players associated with them |
 | Champion analytics | `/analytics/champion-tier-list/`, `/analytics/champion-performance/`, `/analytics/champion-item-builds/`, `/analytics/champion-runes/`, `/analytics/champion-keystones/` | Serve win rates, builds, runes, matchups, scaling, and performance analysis |
 | Champion context | `/analytics/champion-metadata/`, `/analytics/champion-context/`, `/analytics/champion-evolution-paths/`, `/analytics/champion-transformations/` | Supply patch, role, evolution, transformation, and product-specific context |
@@ -117,7 +117,7 @@ The primary public endpoints users interact with:
 ## Runtime Context
 
 ### Diagram: Runtime Topology And Boundaries
-This diagram outlines the major conceptual boundaries with an emphasis on the main integration points for the backed concern: public delivery, cluster workload, Riot API access & rate limiting, data persistence, and durable artifacts. See the [cluster documentation](kubernetes-delivery.md) for detailed and more representative clsuter design.
+This diagram outlines the major conceptual boundaries with an emphasis on the main integration points for the backend concern: public delivery, cluster workload, Riot API access & rate limiting, data persistence, and durable artifacts. See the [cluster documentation](kubernetes-delivery.md) for detailed and more representative cluster design.
 ```mermaid
 flowchart LR
     Browser[Browser / UI User]
@@ -185,13 +185,14 @@ flowchart LR
 
 ## Core API Functionality
 
-The core function of the FastAPI API is to serve response to synchronous, browser-originating HTTP requests.  FastAPI validates requests, considers data freshness requirements & either appropriately serves stale data or seek fresh data, coordinates shared rate limit status through Redis, and uses rate limit aware Riot API requests when the freshest most current data is required.
+The core function of the FastAPI API is to serve responses to synchronous, browser-originating HTTP requests. FastAPI validates requests, considers data freshness requirements, serves stale data when appropriate or seeks fresh data when required, coordinates shared rate-limit state through Redis, and uses rate-limit-aware Riot API requests when fresh external data is needed.
 
 ### YOU ARE HERE - Inside the Runtime Topology And Boundaries Diagram
 
 This is the portion of the integrated backend covered by the Core API section.
-FastAPI and New Destiny are the application path; PostgreSQL, Redis, and the
-Riot API are the boundaries that path reads, coordinates through, or calls.
+FastAPI and New Destiny are the application path; PostgreSQL is the durable state
+it reads and writes, Redis is the shared coordination state New Destiny uses, and
+the Riot API is the external service it calls.
 
 ```mermaid
 flowchart LR
@@ -245,7 +246,7 @@ sequenceDiagram
         else ALTERNATIVE: update=True
             rect rgb(30, 50, 78)
                 User->>API: Request refresh
-                API->>ND: Outbound Riot Request Determined
+                API->>ND: Outbound Riot request
                 ND->>Redis: Preflight admission
                 Redis-->>ND: Admit or block
 
@@ -258,14 +259,14 @@ sequenceDiagram
                         API->>Queue: Enqueue missing match IDs
                         API-->>User: Fresh profile response (201)
                     end
-                else OUTCOME: internally blocked - persisted state sufficient
+                else OUTCOME: blocked - persisted state sufficient
                     rect rgb(82, 69, 24)
                         ND-->>API: Rate-limit exception
                         API->>DB: Read existing profile state
                         DB-->>API: Stale profile data
                         API-->>User: Cached/partial response (206) + retry-after
                     end
-                else OUTCOME: internally blocked - persisted state insufficient
+                else OUTCOME: blocked - persisted state insufficient
                     rect rgb(92, 35, 45)
                         ND-->>API: Rate-limit exception
                         API->>DB: Read existing profile state
@@ -280,7 +281,7 @@ sequenceDiagram
 
 ### New Destiny And Rate Limiting
 
-New Destiny is a separately packaged open source library and rate limiting solution for the Riot API with over 1,500 downloads (without mirrors) on [PyPI](https://pypi.org/project/new-destiny/). It was created by Victor Haynes as an unopinionated, flexible, scalable, and low mainteance solution to solve the primary pain point of 3rd party Riot developers. See the [New Destiny documentation](https://github.com/victorhaynes/new-destiny) for more detail. Riot has extensive rules on their API usage and all officially approved & production-minded League of Legeneds integrations must respect their rules. This was created to solve my own problem but also to provide a free solution to the buzzing officially unofficial 3rd party Riot Dev community.
+New Destiny is a separately packaged open source library and rate limiting solution for the Riot API. At the time of writing, it had over 1,500 downloads (excluding mirrors) on [PyPI](https://pypi.org/project/new-destiny/). It was created by Victor Haynes as an unopinionated, flexible, scalable, and low-maintenance solution to solve the primary pain point of third-party Riot developers. See the [New Destiny documentation](https://github.com/victorhaynes/new-destiny) for more detail. Riot publishes extensive rules on API usage, and production-minded League of Legends integrations must respect them. This was created to solve my own problem but also to provide a free solution to the buzzing, officially unofficial, third-party Riot developer community.
 
 You drop in a properly formatted URL (a Riot API endpoint with appropriate headers and URL params) and New Destiny does the rest:
 
@@ -299,7 +300,7 @@ You drop in a properly formatted URL (a Riot API endpoint with appropriate heade
   operations;
 - can expose low-cardinality and request-level metrics allowing user-driven analytics.
 
-  Read more of the documentation and finer details on [PyPI](https://pypi.org/project/new-destiny/).
+Read more of the documentation and finer details on [PyPI](https://pypi.org/project/new-destiny/).
 
 ```mermaid
 flowchart LR
@@ -311,7 +312,7 @@ flowchart LR
 
     Request --> Preflight
     Preflight -->|admitted| Riot
-    Preflight -->|internally blocked| Outcome
+    Preflight -->|blocked| Outcome
     Riot -->|success| Outcome
     Riot -->|external throttle| Block
     Block --> Outcome
@@ -419,11 +420,11 @@ flowchart LR
 
 ### Diagram: Deployment-Managed Worker Flow
 
-This sequence view covers the long-running workers kept alive by Kubernetes
-Deployments. Match processing and ladder refresh are independent peer paths;
-read each path from top to bottom. `par` means the paths may run concurrently;
+This sequence view covers the 2 main long-running workers process that are ran by Kubernetes
+Deployments: match processing (the draining of the accumulated match ID queue) and the ranked ladder refreshing (the continual updating of live player ranks across the globe).
+Read each path from top to bottom. `par` means the paths may run concurrently;
 `alt` means exactly one outcome occurs within that path. Green identifies
-successful completion, yellow identifies a rate-limit sleep and retry, and red
+successful completion, yellow identifies handled rate-limit sleep and retry scenario, and red
 identifies a real processing or refresh failure.
 
 ```mermaid
@@ -507,9 +508,8 @@ sequenceDiagram
 
 ### Diagram: CronJob-Started Processing Flow
 
-This sequence view covers finite scheduled jobs started by Kubernetes CronJobs.
-It is separate from the long-running worker paths above: these jobs reconcile
-upstream catalog data and publish durable application or asset state.
+This sequence view covers recurring jobs initiated by Kubernetes CronJobs.
+These are the main CronJobs. They reconcile upstream catalog data and publish durable application or asset state. League of Legends receives upstream updates multiple times a day and major patches arrive every two weeks; these jobs keep WR.GG constantly in sync.
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"background": "#0f172a", "primaryColor": "#172033", "primaryTextColor": "#f8fafc", "primaryBorderColor": "#94a3b8", "lineColor": "#cbd5e1", "actorBkg": "#111827", "actorBorder": "#cbd5e1", "actorTextColor": "#f8fafc", "actorLineColor": "#64748b", "signalColor": "#cbd5e1", "signalTextColor": "#f8fafc", "labelBoxBkgColor": "#1e293b", "labelBoxBorderColor": "#94a3b8", "labelTextColor": "#f8fafc", "noteBkgColor": "#334155", "noteBorderColor": "#cbd5e1", "noteTextColor": "#f8fafc"}}}%%
@@ -545,18 +545,17 @@ sequenceDiagram
     end
 ```
 
-The queue is the handoff between request-driven discovery and asynchronous
-match processing. The Deployment keeps the worker alive but does not drain the
-queue itself. Separately, CronJobs start scheduled work; those jobs consume
-CommunityDragon and Data Dragon inputs and write normalized results to
-PostgreSQL or S3.
+The match queue is the handoff between synchronous user-request-driven discovery
+and asynchronous background match processing. Separately, the main CronJobs start
+scheduled work; catalog and asset jobs consume CommunityDragon and Data Dragon
+inputs and write normalized results to PostgreSQL or S3.
 
 ### Worker System
 
 The API and worker images are two Docker targets built from the same backend
 repository, Dockerfile, and build context. The Dockerfile's shared `base`
 stage gives them the same Python runtime, operating-system packages,
-`requirements.txt` dependencies, and common modules. They are not identical
+`requirements.txt` dependencies, and common modules. However they are not identical
 images:
 
 - The `api` target adds `main.py`, FastAPI routes, Alembic migrations, and the
@@ -576,13 +575,17 @@ availability and background throughput are the same workload.
 
 #### Match Queue Worker
 
-The match worker claims queued match jobs, performs protected Match-V5
-requests, writes match archives to S3, persists normalized match and player
-data to PostgreSQL, and records terminal or retryable outcomes. It owns the
-throughput-oriented path that turns user-initiated or system-generated queue
-entries into durable match history.
+The match worker claims queued match ID/platform pairs, performs rate-limit-aware
+outbound Riot requests, writes match archives to S3, persists normalized match and
+player data to PostgreSQL, and records terminal or retryable outcomes. This is the
+path that turns user-initiated or system-generated queue entries into durable match
+history JSON and UI-served data.
 
-When New Destiny internally blocks a match request, the worker does not release
+Claims are platform-scoped and selected in descending `match_id` order. Concurrent
+workers use row locking, so a locked row may be skipped; this is ordered work, but
+not strict FIFO.
+
+When New Destiny raises a rate-limit exception during match processing, the worker does not release
 the queue row. It records the rate-limit error, changes the row to `retry`,
 retains the current claim, sleeps for `retry_after + 1` seconds, and retries the
 same queue job. A successful completion changes the row to `done` and releases
@@ -591,13 +594,10 @@ row to `queued` so another worker can claim it.
 
 #### Ladder Worker
 
-The ladder worker refreshes ranked snapshots for configured regions. It fetches
+The ladder worker refreshes ranked snapshots for all (supported) regions. It fetches
 the relevant ranked pages, resolves the player and mastery data needed for the
 ladder view, updates durable records, and publishes the snapshot consumed by
-the API. It is long-running regional work rather than a browser request.
-It has no queue row to release: the New Destiny retry wrapper sleeps and retries
-rate-limited requests within its retry budget. If that budget is exhausted, the
-current all-or-none snapshot attempt stops without publishing a new snapshot.
+the API. Past versions were browser-initiated single page at a time, but this being continually generated, stored, and served on-demand was clearly the superior pattern. The New Destiny retry wrapper sleeps and retries rate-limited requests within its retry budget. If that budget is exhausted, the current all-or-none snapshot attempt stops without publishing a new snapshot.
 
 #### Scheduled Data And Asset Jobs
 
@@ -609,9 +609,7 @@ Recurring jobs keep the rapidly changing game catalog usable:
 - tier-cohort and other derived analytics refreshes.
 
 Initialization and recurring reconciliation use different patch-readiness
-policies so a newly published Data Dragon patch cannot prevent a fresh
-environment from starting while still allowing the live environment to catch
-up when all sources are ready.
+policies so a fresh environment can start before every upstream source is ready.
 
 #### Archive, SEO, And Maintenance Jobs
 
@@ -626,25 +624,27 @@ replace PostgreSQL as the durable application source of truth.
 ## Database Lifecycle
 
 Database schema changes are versioned with Alembic. Runtime startup does not
-silently invent a schema; the initialization sequence applies migrations and
-then runs idempotent seed and refresh jobs. Existing data is treated as durable
-state, so destructive reset and snapshot restore are explicit infrastructure
+silently create schema changes; the initialization sequence applies migrations from
+the checked-in migration files included in the backend release and then runs
+idempotent seed and refresh jobs. Existing data is treated as durable state, so destructive reset and snapshot restore are explicit infrastructure
 operations rather than normal application deployment behavior.
 
 ## Failure Boundaries
 
-- A backend image failure affects API and workers using that release, but an
-  earlier immutable artifact can be selected without rebuilding.
-- A worker failure delays ingestion and derived data, but should not make the
-  public static shell unavailable.
-- Redis loss affects coordination, rate limiting, queue state, and dashboard
-  observations; it is not the durable product database.
+- A backend image failure affects the API & worker deployments and the cronjobs using that release, but an earlier immutable artifact can be selected without rebuilding.
+- A worker failure delays ingestion and derived data, but does not make the
+  public static shell unavailable. When catalog data is missing, placeholders can
+  be inserted and then reconcilers use an UPSERT pattern.
+- Redis loss affects coordination, rate limiting, and dashboard
+  observations/request-related metrics. It is not a durable-data outage, but Riot
+  is more likely to rate limit you while New Destiny rebuilds its local state from
+  subsequent requests; it is written to recover from this kind of state loss.
 - PostgreSQL failure affects durable product behavior and requires the explicit
   storage recovery path described in [Delivery and operations](delivery-and-operations.md).
 
 ## Source Of Truth
 
-The backend repository is the source of truth for runtime behavior. The
+This backend repository is the source of truth for runtime behavior. The
 published backend release is the source of truth for a deployable image. The
 production `k8s-live` revision is the source of truth for which release is
 requested.
