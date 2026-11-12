@@ -31,7 +31,7 @@ lifecycle while the FastAPI API owns validation, freshness, and durable data.
 flowchart LR
     Browser[Browser]
     Shell[React shell and React Router]
-    Capabilities[deployment scope]
+    Capabilities[Deployment Scope]
     Search[Search routes]
     Profiles[Summoner and live-game routes]
     Analytics[Champion analytics routes]
