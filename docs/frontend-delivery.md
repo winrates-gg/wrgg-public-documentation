@@ -72,7 +72,7 @@ flowchart LR
 ### State And Capability Boundaries
 
 The URL carries the resource identity and state relevant rendered-content, including roles, tiers (elo brackets), patches (game versions), platforms (game servers), and champion mastery buckets. This makes important views directly linkable/navigable,
-reloadable, and and usable as SEO targets without requiring a more robust server-side solution.
+reloadable, and usable as SEO targets without requiring a more robust server-side solution.
 
 The UI always loads `/capabilities/` before rendering any main content. `/capabilities/` exposes the scope of the current deployment (WR.GG is in open beta) and makes certain UI features inaccessible. This is essentially a toggle that can be used to decrease or increase the scope of the beta/supported regions. The API validates the same deployment boundary independently.
 
@@ -85,7 +85,7 @@ flowchart LR
     S3[S3 public site bucket]
     CDN[CloudFront distribution]
     Browser[Browser]
-    SEO[Backend SEO publisher]
+    SEO[Kubernetes SEO publication CronJob]
 
     Commit --> Release
     Release --> S3
@@ -94,7 +94,7 @@ flowchart LR
     SEO -->|current SEO objects and sitemap| S3
 ```
 
-The publishing surface writes an immutable release and then promotes the selected
+The React artifact publishing surface writes an immutable release and then promotes the selected
 content under the site's `current/` path. Hashed JavaScript and CSS assets are
 cacheable. The current HTML shell and release metadata are controlled more
 carefully so a new publication can be discovered without rebuilding the
@@ -102,8 +102,11 @@ backend or reading the live database from the browser.
 
 ## SEO Content
 
-The backend periodically produces a versioned SEO content artifact based on current data (i.e. the state of production). A worker publishes static HTML pages and sitemap
-objects to the public site bucket.
+The backend periodically produces a versioned SEO content artifact based on
+current data, meaning the state of production. Kubernetes runs the backend's
+SEO publication worker as a non-blocking CronJob. It reads that data, renders
+static HTML pages and sitemap objects, and publishes them to the public site
+bucket.
 
 This is a static publishing pattern rather than server-side rendering. The React application
 remains the normal interactive experience, while the generated HTML gives crawlers meaningful page
