@@ -2,24 +2,23 @@
 
 ## Purpose
 
-The frontend has two deliberately different delivery products:
+The `frontend` spans two primary delivery products:
 
-1. The public React application, served as static content through S3 and
+1. The public React build, served as static content through S3 and
    CloudFront.
-2. The private operations dashboard, built from the same frontend source but
-   packaged as a small Nginx image and served inside the cluster.
+2. A private operations dashboard, built from the same frontend source but
+   packaged as a small Nginx image and served inside the cluster accessible only through a private network.
 
-This prevents a private operational view from becoming part of the public
-website delivery contract.
+This prevents private operational applications from becoming part of the public
+website delivery surface.
 
 ## Frontend Architecture
 
-The public product is a client-rendered React single-page application. The
-browser receives the static application shell, React mounts the application,
-and React Router selects the page component for the current URL. The backend
-remains the source of truth for product data; the frontend assembles that data
-into interactive profiles, analytics, ladders, match history, and live-game
-views.
+The WR.GG UI is a client-rendered React single-page application. The
+browser receives the static app shell, React mounts the application,
+and React Router selects the page component for the current URL. While the backend
+and multiple S3 buckets are the source of truth for product data. The frontend fetches that data
+and assembles it into meaning features: interactive player profiles, analytics, ladders, match history, and live-game views.
 
 ### Route And API Surface
 
@@ -68,7 +67,7 @@ flowchart LR
 | Tier lists | `/analytics/tier-list`, `/analytics/tier-list/high-mastery` | `/analytics/patch-options/`, `/analytics/champion-tier-list/` |
 | Mastery | `/analytics/mastery`, `/analytics/mastery/:championNameId` | `/champions/`, `/leaderboards/mastery/` |
 | Ranked ladders | `/ladder/:displayRegion/:ladderType/:pageNumber` | `/ladder/`, static map content |
-| Informational and fallback pages | `/faq`, `/contact`, unmatched routes | Static React content, EmailJS contact submission, and route-level error presentation |
+| Other pages | `/faq`, `/contact`, unmatched routes | Static React content, EmailJS contact submission, 404s |
 
 The analytics route family intentionally fans out to several specialized API
 requests because the page presents distinct product concerns: performance,
