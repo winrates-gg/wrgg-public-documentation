@@ -81,6 +81,5 @@ every problem into a single deployment status.
 An image or chart rollback changes the selected immutable cluster revision and
 lets Argo reconcile it. It does not rebuild the artifact, replace the control
 plane, or destroy the database volume. Control-plane replacement and database
-restore are separate recovery concerns documented in [Host and cluster
-foundation](host-and-cluster.md), [Cloud infrastructure](cloud-infrastructure.md),
-and [Delivery and operations](delivery-and-operations.md).
+restore are separate recovery concerns documented in [Infrastructure](infrastructure.md)
+and [CI/CD and release](ci-cd.md).

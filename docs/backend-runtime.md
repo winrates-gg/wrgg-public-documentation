@@ -640,7 +640,7 @@ operations rather than normal application deployment behavior.
   is more likely to rate limit you while New Destiny rebuilds its local state from
   subsequent requests; it is written to recover from this kind of state loss.
 - PostgreSQL failure affects durable product behavior and requires the explicit
-  storage recovery path described in [Delivery and operations](delivery-and-operations.md).
+  storage recovery path described in [Infrastructure](infrastructure.md).
 
 ## Source Of Truth
 
