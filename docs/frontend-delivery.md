@@ -69,23 +69,12 @@ flowchart LR
 | Ranked ladders | `/ladder/:displayRegion/:ladderType/:pageNumber` | `/ladder/`, static map content |
 | Other pages | `/faq`, `/contact`, unmatched routes | Static React content, EmailJS contact submission, 404s |
 
-The analytics route family intentionally fans out to several specialized API
-requests because the page presents distinct product concerns: performance,
-itemization, runes, matchups, synergies, transformations, and scaling. The
-frontend coordinates those requests; it does not reproduce the analytics
-calculation logic.
-
 ### State And Capability Boundaries
 
-The URL carries resource identity and meaningful view state such as role, tier,
-patch, platform, and mastery bucket. That makes important views linkable,
-reloadable, and usable as SEO targets without requiring a server-side session.
-Transient loading, filtering, and presentation state remains in the client.
+The URL carries the resource identity and state relevant rendered-content, including roles, tiers (elo brackets), patches (game versions), platforms (game servers), and champion mastery buckets. This makes important views directly linkable/navigable,
+reloadable, and and usable as SEO targets without requiring a more robust server-side solution.
 
-The public application loads `/capabilities/` before exposing its regional
-selectors. That response lets the same React surface represent a narrower beta
-scope without hard-coding a different product. The API validates the same
-deployment boundary independently.
+The UI always loads `/capabilities/` before rendering any main content. `/capabilities/` exposes the scope of the current deployment (WR.GG is in open beta) and makes certain UI features inaccessible. This is essentially a toggle that can be used to decrease or increase the scope of the beta/supported regions. The API validates the same deployment boundary independently.
 
 ## Public Site Flow
 
@@ -105,7 +94,7 @@ flowchart LR
     SEO -->|current SEO objects and sitemap| S3
 ```
 
-The publisher writes an immutable release and then promotes the selected
+The publishing surface writes an immutable release and then promotes the selected
 content under the site's `current/` path. Hashed JavaScript and CSS assets are
 cacheable. The current HTML shell and release metadata are controlled more
 carefully so a new publication can be discovered without rebuilding the
@@ -113,16 +102,18 @@ backend or reading the live database from the browser.
 
 ## SEO Content
 
-The backend periodically produces a versioned SEO content artifact from the
-environment's current data. A worker publishes static HTML pages and sitemap
-objects to the public site bucket. The frontend publisher does not require a
-live API or database and does not delete SEO objects when the React bundle is
-replaced.
+The backend periodically produces a versioned SEO content artifact based on current data (i.e. the state of production). A worker publishes static HTML pages and sitemap
+objects to the public site bucket.
 
-This is a static publishing pattern rather than server-side rendering. The
-React application remains the normal interactive experience, while generated
-HTML gives crawlers meaningful page content, canonical URLs, headings, and
-metadata without coupling every frontend deployment to database availability.
+This is a static publishing pattern rather than server-side rendering. The React application
+remains the normal interactive experience, while the generated HTML gives crawlers meaningful page
+content, canonical URLs, headings, and metadata without coupling every frontend deployment to
+database availability.
+
+This server-generated and stored pattern also separates page generation from page delivery. High-
+value canonical URLs can be generated dynamically from current production data, then served as
+stable, inexpensive static objects. The pages can be refreshed as the data changes without
+requiring a live API or database request every time a crawler visits them.
 
 ## Private Dashboard Flow
 
@@ -145,7 +136,7 @@ flowchart LR
 ```
 
 The dashboard image contains only the static dashboard bundle. It is selected
-through Kubernetes desired state and served by private ingress. The browser
+through Kubernetes desired state specified at time of cluster-up or during automated ArgoCD cluster syncing and served over a private ingress surface. The browser
 never contacts the S3 public site bucket for dashboard data. A separate
 dashboard API runs the backend in a dashboard-only mode and reads existing
 Redis and PostgreSQL state.
