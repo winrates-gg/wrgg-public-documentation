@@ -126,6 +126,7 @@ flowchart LR
     PublicSite[(S3 React Build)]
     APIIngress[K3S Cluster Ingress]
     API[FastAPI API]
+    Controllers[Kubernetes controllers]
     Deployments[Kubernetes Deployments]
     CronJobs[Kubernetes CronJobs]
     MatchWorker[Match queue workers]
@@ -146,6 +147,8 @@ flowchart LR
     APICloudFront --> APIIngress
     APIIngress --> API
 
+    Controllers -.-> Deployments
+    Controllers -.-> CronJobs
     Deployments -.-> API
     Deployments -.-> MatchWorker
     Deployments -.-> LadderWorker
@@ -174,7 +177,7 @@ flowchart LR
     classDef external fill:#fde5e5,stroke:#c54b4b,color:#4a1717
 
     class Browser user
-    class Deployments,CronJobs,APIIngress platform
+    class Controllers,Deployments,CronJobs,APIIngress platform
     class API,MatchWorker,LadderWorker,Jobs,NewDestiny backend
     class CloudFront,APICloudFront,PublicSite,Redis,Postgres,Archives,Assets aws
     class Riot,CommunityDragon,DataDragon external
@@ -246,7 +249,7 @@ sequenceDiagram
                 ND->>Redis: Preflight admission
                 Redis-->>ND: Admit or block
 
-                alt OUTCOME: admitted - can loop @ admission check
+                alt OUTCOME: admitted
                     rect rgb(25, 76, 52)
                         ND->>Riot: Riot API request
                         Riot-->>ND: Fresh Riot data
@@ -353,96 +356,198 @@ change.
 
 ## Background Processing
 
-Background processing is the asynchronous portion of the backend. The API can
-persist current state or record work for later completion; long-running worker
-Deployments drain queues and refresh snapshots, while Kubernetes CronJobs start
-finite catalog, analytics, asset, archive, SEO, and maintenance jobs.
+Background processing is the asynchronous portion of the backend. The core API
+can record work for later completion; long-running worker Deployments claim and
+process queue rows or refresh snapshots, while Kubernetes CronJobs start finite
+catalog, analytics, asset, archive, SEO, and maintenance jobs.
 
-### Diagram: Background Processing Flow
+### YOU ARE HERE - Inside the Runtime Topology And Boundaries Diagram
 
-This sequence view has two kinds of initiator. The Kubernetes controller keeps
-long-running worker Deployments alive; Kubernetes CronJobs start finite
-scheduled jobs. These paths do not require a browser request. All first-level
-background paths share one blue-gray fill, while nested outcomes share the next
-color tier. Within that tier, green identifies admission and yellow identifies
-local blocking.
+This is the portion of the integrated backend covered by the Background
+Processing section. Kubernetes controllers reconcile Deployments and CronJobs;
+Deployments keep long-running workers alive, while CronJobs start finite
+scheduled jobs. Workers and scheduled jobs use New Destiny and Redis when they
+need Riot data, then write durable results to PostgreSQL or S3.
+
+```mermaid
+flowchart LR
+    Controllers[Kubernetes controllers]
+    Deployments[Kubernetes Deployments]
+    CronJobs[Kubernetes CronJobs]
+    MatchWorker[Match queue workers]
+    LadderWorker[Ladder and refresh workers]
+    Jobs[Scheduled data and maintenance jobs]
+    NewDestiny[New Destiny]
+    Redis[(Redis coordination state)]
+    Postgres[(PostgreSQL product data)]
+    Archives[(S3 match archives)]
+    Assets[(S3 assets and published artifacts)]
+    Riot[Riot API]
+    CommunityDragon[CommunityDragon]
+    DataDragon[Data Dragon]
+
+    Controllers -.-> Deployments
+    Controllers -.-> CronJobs
+    Deployments -.-> MatchWorker
+    Deployments -.-> LadderWorker
+    CronJobs -.-> Jobs
+
+    MatchWorker <--> NewDestiny
+    LadderWorker <--> NewDestiny
+    NewDestiny <--> Redis
+    NewDestiny <--> Riot
+
+    MatchWorker <--> Postgres
+    MatchWorker --> Archives
+    LadderWorker --> Postgres
+    Jobs <--> CommunityDragon
+    Jobs <--> DataDragon
+    Jobs --> Postgres
+    Jobs --> Assets
+    Jobs --> Archives
+
+    classDef platform fill:#f2f2f2,stroke:#858585,color:#202020
+    classDef backend fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
+    classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
+    classDef external fill:#fde5e5,stroke:#c54b4b,color:#4a1717
+
+    class Controllers,Deployments,CronJobs platform
+    class MatchWorker,LadderWorker,Jobs,NewDestiny backend
+    class Redis,Postgres,Archives,Assets aws
+    class Riot,CommunityDragon,DataDragon external
+```
+
+### Diagram: Deployment-Managed Worker Flow
+
+This sequence view covers the long-running workers kept alive by Kubernetes
+Deployments. Match processing and ladder refresh are independent peer paths;
+read each path from top to bottom. `par` means the paths may run concurrently;
+`alt` means exactly one outcome occurs within that path. Green identifies
+successful completion, yellow identifies a rate-limit sleep and retry, and red
+identifies a real processing or refresh failure.
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"background": "#0f172a", "primaryColor": "#172033", "primaryTextColor": "#f8fafc", "primaryBorderColor": "#94a3b8", "lineColor": "#cbd5e1", "actorBkg": "#111827", "actorBorder": "#cbd5e1", "actorTextColor": "#f8fafc", "actorLineColor": "#64748b", "signalColor": "#cbd5e1", "signalTextColor": "#f8fafc", "labelBoxBkgColor": "#1e293b", "labelBoxBorderColor": "#94a3b8", "labelTextColor": "#f8fafc", "noteBkgColor": "#334155", "noteBorderColor": "#cbd5e1", "noteTextColor": "#f8fafc"}}}%%
 sequenceDiagram
-    actor Controller as Kubernetes controller
-    actor Cron as Kubernetes CronJob
+    actor Controller as Kubernetes controllers
+    actor Deployment as Kubernetes Deployment
     participant MatchWorker as Match worker
     participant Queue as match_build_queue
     participant LadderWorker as Ladder worker
-    participant Jobs as Scheduled jobs
     participant ND as New Destiny
     participant Redis as Redis
     participant Riot as Riot API
     participant DB as PostgreSQL
-    participant CDragon as CommunityDragon
-    participant DDragon as Data Dragon
     participant S3 as S3 buckets
 
-    Note over Controller,S3: INDEPENDENT BACKGROUND PROCESSING
+    Note over Controller,S3: DEPLOYMENT-MANAGED WORKER PROCESSING
     rect rgb(23, 32, 51)
-        par DEPLOYMENT-MANAGED: match queue drain
+        par MATCH QUEUE DRAIN
             rect rgb(30, 50, 78)
-                Controller->>MatchWorker: Keep worker running
+                Controller->>Deployment: Reconcile Deployment
+                Deployment->>MatchWorker: Keep worker running
                 MatchWorker->>Queue: Claim and update rows
-                MatchWorker->>ND: Protected match request
-                ND->>Redis: Check admission and blocks
-                Redis-->>ND: Admit or reject
-                alt admitted locally
-                    rect rgb(25, 76, 52)
-                        ND->>Riot: Request match data
-                        Riot-->>ND: Match data or external 429
-                        ND-->>MatchWorker: Result or exception
-                        MatchWorker->>DB: Persist normalized match data
-                        MatchWorker->>S3: Write match archive
-                    end
-                else blocked locally
-                    rect rgb(82, 69, 24)
-                        ND-->>MatchWorker: Internal rate-limit exception
+                loop PROCESS CLAIMED QUEUE JOB
+                    MatchWorker->>ND: Outbound Riot request
+                    ND->>Redis: Preflight admission
+                    Redis-->>ND: Admit or block
+                    alt OUTCOME: admitted - request proceeds
+                        rect rgb(25, 76, 52)
+                            ND->>Riot: Riot API request
+                            Riot-->>ND: Fresh Riot data
+                            ND-->>MatchWorker: Fresh result
+                            alt OUTCOME: processing completed
+                                MatchWorker->>DB: Persist normalized match data
+                                MatchWorker->>S3: Write match archive
+                                MatchWorker->>Queue: Mark row done and release claim
+                            else OUTCOME: processing error - retry or fail
+                                rect rgb(92, 35, 45)
+                                    MatchWorker->>Queue: Record retry or failed state
+                                    MatchWorker-->>MatchWorker: Apply bounded backoff or stop after retry budget
+                                end
+                            end
+                        end
+                    else OUTCOME: rate limited - sleep and retry
+                        rect rgb(82, 69, 24)
+                            ND-->>MatchWorker: Rate-limit exception
+                            MatchWorker->>Queue: Record retry state and retain claim
+                            MatchWorker-->>MatchWorker: Sleep retry-after + 1 second
+                        end
                     end
                 end
             end
-        and DEPLOYMENT-MANAGED: ladder refresh
+        and LADDER REFRESH
             rect rgb(30, 50, 78)
-                Controller->>LadderWorker: Keep worker running
-                LadderWorker->>ND: Protected ladder request
-                ND->>Redis: Check admission and blocks
-                Redis-->>ND: Admit or reject
-                alt admitted locally
+                Controller->>Deployment: Reconcile Deployment
+                Deployment->>LadderWorker: Keep worker running
+                LadderWorker->>ND: Outbound Riot request
+                ND->>Redis: Preflight admission
+                Redis-->>ND: Admit or block
+                alt OUTCOME: refresh completed
                     rect rgb(25, 76, 52)
-                        ND->>Riot: Request ladder data
-                        Riot-->>ND: Ladder data or external 429
-                        ND-->>LadderWorker: Result or exception
+                        ND->>Riot: Riot API request
+                        Riot-->>ND: Fresh Riot data
+                        ND-->>LadderWorker: Fresh result
                         LadderWorker->>DB: Persist ladder snapshot
                     end
-                else blocked locally
+                else OUTCOME: rate limited - bounded sleep and retry
                     rect rgb(82, 69, 24)
-                        ND-->>LadderWorker: Internal rate-limit exception
+                        ND-->>LadderWorker: Rate-limit exception
+                        LadderWorker-->>LadderWorker: Retry wrapper sleeps and retries
+                    end
+                else OUTCOME: refresh error - stop snapshot attempt
+                    rect rgb(92, 35, 45)
+                        LadderWorker-->>LadderWorker: Do not publish a new snapshot
                     end
                 end
             end
-        and CRONJOB-STARTED: catalog and analytics work
-            rect rgb(30, 50, 78)
-                Cron->>Jobs: Start scheduled processing
-                Jobs->>CDragon: Read upstream catalog data
-                CDragon-->>Jobs: Catalog response
-                Jobs->>DDragon: Read upstream catalog data
-                DDragon-->>Jobs: Catalog response
-                Jobs->>DB: Write normalized data
-                Jobs->>S3: Write assets or published artifacts
+        end
+    end
+```
+
+### Diagram: CronJob-Started Processing Flow
+
+This sequence view covers finite scheduled jobs started by Kubernetes CronJobs.
+It is separate from the long-running worker paths above: these jobs reconcile
+upstream catalog data and publish durable application or asset state.
+
+```mermaid
+%%{init: {"theme": "base", "themeVariables": {"background": "#0f172a", "primaryColor": "#172033", "primaryTextColor": "#f8fafc", "primaryBorderColor": "#94a3b8", "lineColor": "#cbd5e1", "actorBkg": "#111827", "actorBorder": "#cbd5e1", "actorTextColor": "#f8fafc", "actorLineColor": "#64748b", "signalColor": "#cbd5e1", "signalTextColor": "#f8fafc", "labelBoxBkgColor": "#1e293b", "labelBoxBorderColor": "#94a3b8", "labelTextColor": "#f8fafc", "noteBkgColor": "#334155", "noteBorderColor": "#cbd5e1", "noteTextColor": "#f8fafc"}}}%%
+sequenceDiagram
+    actor Controller as Kubernetes controllers
+    actor Cron as Kubernetes CronJob
+    participant Jobs as Scheduled jobs
+    participant CDragon as CommunityDragon
+    participant DDragon as Data Dragon
+    participant DB as PostgreSQL
+    participant S3 as S3 buckets
+
+    Note over Controller,S3: CRONJOB-STARTED SCHEDULED PROCESSING
+    rect rgb(23, 32, 51)
+        rect rgb(30, 50, 78)
+            Controller->>Cron: Reconcile CronJob schedule
+            Cron->>Jobs: Start scheduled processing
+            alt OUTCOME: scheduled processing completed
+                rect rgb(25, 76, 52)
+                    Jobs->>CDragon: Read upstream catalog data
+                    CDragon-->>Jobs: Catalog response
+                    Jobs->>DDragon: Read upstream catalog data
+                    DDragon-->>Jobs: Catalog response
+                    Jobs->>DB: Write normalized data
+                    Jobs->>S3: Write assets or published artifacts
+                end
+            else OUTCOME: scheduled processing failed
+                rect rgb(92, 35, 45)
+                    Jobs-->>Jobs: Job exits with failure
+                end
             end
         end
     end
 ```
 
 The queue is the handoff between request-driven discovery and asynchronous
-match processing. The controller keeps the worker alive but does not drain the
-queue itself. CronJobs independently start scheduled work; those jobs consume
+match processing. The Deployment keeps the worker alive but does not drain the
+queue itself. Separately, CronJobs start scheduled work; those jobs consume
 CommunityDragon and Data Dragon inputs and write normalized results to
 PostgreSQL or S3.
 
@@ -477,12 +582,22 @@ data to PostgreSQL, and records terminal or retryable outcomes. It owns the
 throughput-oriented path that turns user-initiated or system-generated queue
 entries into durable match history.
 
+When New Destiny internally blocks a match request, the worker does not release
+the queue row. It records the rate-limit error, changes the row to `retry`,
+retains the current claim, sleeps for `retry_after + 1` seconds, and retries the
+same queue job. A successful completion changes the row to `done` and releases
+the claim. If the worker dies, stale-lease reclamation eventually returns the
+row to `queued` so another worker can claim it.
+
 #### Ladder Worker
 
 The ladder worker refreshes ranked snapshots for configured regions. It fetches
 the relevant ranked pages, resolves the player and mastery data needed for the
 ladder view, updates durable records, and publishes the snapshot consumed by
 the API. It is long-running regional work rather than a browser request.
+It has no queue row to release: the New Destiny retry wrapper sleeps and retries
+rate-limited requests within its retry budget. If that budget is exhausted, the
+current all-or-none snapshot attempt stops without publishing a new snapshot.
 
 #### Scheduled Data And Asset Jobs
 
