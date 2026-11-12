@@ -150,5 +150,3 @@ Redis and PostgreSQL state.
 - The current shell points at the promoted asset set.
 - A browser tab may continue using an older already-loaded bundle until a new
   navigation or reload obtains the current shell.
-- A CDN cache issue is therefore different from an unsuccessful publication;
-  release metadata and origin responses are the first checks.
