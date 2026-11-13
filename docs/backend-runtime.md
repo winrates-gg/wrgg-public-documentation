@@ -117,7 +117,7 @@ The primary public endpoints users interact with:
 ## Runtime Context
 
 ### Diagram: Runtime Topology And Boundaries
-This diagram outlines the major conceptual boundaries with an emphasis on the main integration points for the backend concern: public delivery, cluster workload, Riot API access & rate limiting, data persistence, and durable artifacts. See the [cluster documentation](kubernetes-delivery.md) for detailed and more representative cluster design.
+This diagram outlines the major conceptual boundaries with an emphasis on the main integration points for the backend concern: public delivery, cluster workload, Riot API access & rate limiting, data persistence, and durable artifacts. See the [cluster documentation](kubernetes-runtime.md) for detailed and more representative cluster design.
 ```mermaid
 flowchart LR
     Browser[Browser / UI User]

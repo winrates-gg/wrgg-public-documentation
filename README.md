@@ -14,7 +14,7 @@ flowchart LR
     Backend[Backend runtime]
     Data[Durable and runtime data]
     Infra[Infrastructure]
-    K8s[Kubernetes delivery]
+    K8s[Kubernetes runtime]
     CICD[CI/CD and release]
     Riot[Riot API]
 
@@ -39,7 +39,7 @@ how it is hosted, delivered, and operated.
 | Backend | How does the API acquire, protect, process, and serve Riot data? | [Backend runtime](docs/backend-runtime.md) |
 | Frontend | How are the public site, SEO objects, and private dashboard delivered? | [Frontend delivery](docs/frontend-delivery.md) |
 | Infrastructure | What cloud, storage, host, network, and access foundations exist? | [Infrastructure](docs/infrastructure.md) |
-| Kubernetes | How does desired state become running workloads? | [Kubernetes delivery](docs/kubernetes-delivery.md) |
+| Kubernetes | How are cluster objects composed, scheduled, and reconciled? | [Kubernetes runtime](docs/kubernetes-runtime.md) |
 | CI/CD | How does validated source become an immutable production release? | [CI/CD and release](docs/ci-cd.md) |
 
 ## Lifecycle In One View

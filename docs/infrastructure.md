@@ -95,4 +95,4 @@ Infrastructure failure can make the cluster, network, storage, or optional
 worker unavailable, but infrastructure does not decide which application
 artifact is healthy. Application release selection and rollback belong to
 [CI/CD and release](ci-cd.md), while runtime reconciliation belongs to
-[Kubernetes delivery](kubernetes-delivery.md).
+[Kubernetes runtime](kubernetes-runtime.md).
