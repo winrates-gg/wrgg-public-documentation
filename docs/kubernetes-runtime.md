@@ -28,7 +28,7 @@ The diagrams in this document use the shared architecture palette:
 
 | Color | Meaning |
 | --- | --- |
-| Gray | User-facing actors or boundaries |
+| Gray | Neutral actors, boundaries, orchestration, and configuration concepts |
 | Green | Highlighted WR.GG application code/workload runtime (AWS or on-prem; see [Infrastructure](infrastructure.md)) |
 | Blue | AWS-hosted infrastructure |
 | Red | External services outside WR.GG's ownership |
@@ -104,9 +104,9 @@ flowchart LR
     classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
     classDef external fill:#fde5e5,stroke:#c54b4b,color:#4a1717
 
-    class Public,PublicIngress,BackendService,Operator,PrivateIngress,DashboardService,DashboardAPIService neutral
-    class API,Dashboard,DashboardAPI app
-    class Redis,PostgreSQL aws
+    class Public,Operator neutral
+    class PublicIngress,BackendService,API,PrivateIngress,DashboardService,DashboardAPIService,Dashboard,DashboardAPI,Redis app
+    class PostgreSQL aws
     class Riot external
 ```
 
@@ -129,69 +129,80 @@ resources that take over reconciliation, and how the Helm layers render into
 the cluster.
 
 ```mermaid
-flowchart LR
-    BootstrapGateway[EC2 user-data bootstrap]
+flowchart TB
+    BootstrapGateway[EC2 Control Plane user-data bootstrap]
     Clone[One-time Git clone]
     Desired[GitHub desired-state repository]
     RootApply[kubectl applies Argo CD + root Application]
     Argo[Argo CD reconciliation loop]
-    BootstrapSet[Bootstrap ApplicationSet]
-    RuntimeSet[Runtime ApplicationSet]
-    BootstrapChart[Bootstrap Helm chart]
-    InitChart[Init Helm chart]
-    RuntimeChart[Runtime Helm chart]
-
-    subgraph BootstrapResources[Bootstrap resources]
-        IngressController["Deployment: private-ingress-controller"]
-        IngressResources["IngressClass + private-argocd-ingress"]
-        AccessResources["ServiceAccount + RBAC + admission policy"]
-        DNSResource["ConfigMap: CoreDNS customization"]
-    end
-
-    subgraph InitResources[Initialization resources]
-        Migration["Job: database-migration"]
-        Seed["Job: database-seed"]
-        DataInit["Job: database-data-init"]
-        AssetInit["Jobs: initial asset refreshes"]
-    end
-
-    subgraph RuntimeResources[Runtime resources]
-        Config["ConfigMap: backend-config"]
-        RedisResource["Deployment + Service: Redis"]
-        APIResource["Deployment + Service + Ingress: backend API"]
-        MatchWorkers["Deployments: match worker per platform"]
-        LadderWorkers["Deployments: ladder worker per region"]
-        Recurring["CronJobs -> Jobs: data, assets, archives, analytics, SEO"]
-        DashboardResources["Deployments + Services + Ingress: dashboard"]
-    end
 
     BootstrapGateway --> Clone --> RootApply --> Argo
     Desired --> Clone
     Desired --> Argo
     Argo -.-> Desired
+
+    subgraph BootstrapLayer[BOOTSTRAP]
+        direction LR
+        BootstrapSet[Bootstrap ApplicationSet]
+        BootstrapChart[Bootstrap Helm chart]
+        subgraph BootstrapResources[Bootstrap resources]
+            direction LR
+            IngressController["Deployment: private-ingress-controller"]
+            IngressResources["IngressClass + private-argocd-ingress"]
+            AccessResources["ServiceAccount + RBAC + admission policy"]
+            DNSResource["ConfigMap: CoreDNS customization"]
+        end
+        BootstrapSet --> BootstrapChart
+        BootstrapChart --> IngressController
+        BootstrapChart --> IngressResources
+        BootstrapChart --> AccessResources
+        BootstrapChart --> DNSResource
+    end
+
+    RuntimeSet[Runtime ApplicationSet]
+
+    subgraph InitLayer[INIT]
+        direction LR
+        InitChart[Init Helm chart]
+        subgraph InitResources[Initialization resources]
+            direction LR
+            Migration["Job: database-migration"]
+            Seed["Job: database-seed"]
+            DataInit["Job: database-data-init"]
+            AssetInit["Jobs: initial asset refreshes"]
+        end
+        InitChart --> Migration
+        InitChart --> Seed
+        InitChart --> DataInit
+        InitChart --> AssetInit
+    end
+
+    subgraph RuntimeLayer[RUNTIME]
+        direction LR
+        RuntimeChart[Runtime Helm chart]
+        subgraph RuntimeResources[Runtime resources]
+            direction LR
+            Config["ConfigMap: backend-config"]
+            RedisResource["Deployment + Service: Redis"]
+            APIResource["Deployment + Service + Ingress: backend API"]
+            MatchWorkers["Deployments: match worker per platform"]
+            LadderWorkers["Deployments: ladder worker per region"]
+            Recurring["CronJobs -> Jobs: data, assets, archives, analytics, SEO"]
+            DashboardResources["Deployments + Services + Ingress: dashboard"]
+        end
+        RuntimeChart --> Config
+        RuntimeChart --> RedisResource
+        RuntimeChart --> APIResource
+        RuntimeChart --> MatchWorkers
+        RuntimeChart --> LadderWorkers
+        RuntimeChart --> Recurring
+        RuntimeChart --> DashboardResources
+    end
+
     Argo --> BootstrapSet
     Argo --> RuntimeSet
-    BootstrapSet --> BootstrapChart
     RuntimeSet --> InitChart
     RuntimeSet --> RuntimeChart
-
-    BootstrapChart --> IngressController
-    BootstrapChart --> IngressResources
-    BootstrapChart --> AccessResources
-    BootstrapChart --> DNSResource
-
-    InitChart --> Migration
-    InitChart --> Seed
-    InitChart --> DataInit
-    InitChart --> AssetInit
-
-    RuntimeChart --> Config
-    RuntimeChart --> RedisResource
-    RuntimeChart --> APIResource
-    RuntimeChart --> MatchWorkers
-    RuntimeChart --> LadderWorkers
-    RuntimeChart --> Recurring
-    RuntimeChart --> DashboardResources
 
     classDef neutral fill:#f2f2f2,stroke:#858585,color:#202020
     classDef app fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
@@ -199,28 +210,38 @@ flowchart LR
 
     class Clone,Desired,RootApply,Argo,BootstrapSet,RuntimeSet,BootstrapChart,InitChart,RuntimeChart neutral
     class BootstrapGateway aws
-    class IngressController,IngressResources,AccessResources,DNSResource,Config neutral
-    class Migration,Seed,DataInit,AssetInit,APIResource,MatchWorkers,LadderWorkers,Recurring,DashboardResources app
-    class RedisResource aws
+    class IngressController,IngressResources,AccessResources,DNSResource,Config,Migration,Seed,DataInit,AssetInit,APIResource,MatchWorkers,LadderWorkers,Recurring,DashboardResources,RedisResource app
 ```
 
-The first path is the initial control-plane bootstrap: EC2 user data clones the
-desired-state repository and uses `kubectl` to install Argo CD and apply the
-root `Application`. The steady-state relationship begins once Argo exists: Argo's
-repo-server reads the remote repository, compares it with observed cluster
-state, and reconciles the difference. The dashed edge represents that repeated
-fetch-and-compare loop; it does not write changes back to GitHub. The EC2-local
-clone is not the ongoing source of reconciliation.
+The diagram reads from top to bottom as bootstrap, init, and runtime. Each band
+reads left to right from its ApplicationSet or Helm chart into the resources it
+renders. The runtime ApplicationSet supplies both the init and runtime chart
+paths.
 
-The bootstrap chart is a separate cluster-support Application. The runtime
-ApplicationSet supplies two Helm sources: the initialization chart for finite
-Jobs and the runtime chart for steady-state workloads. The environment values
-and selected release tags are supplied by `k8s-live`; they are not inferred by
-the chart.
-
-The chart also consumes an environment Secret for credentials. That Secret is
-part of the cluster's environment contract but is intentionally not generated
-by this public documentation's Helm diagram.
+- **Initial gateway:** EC2 user data installs K3s, creating the cluster, then
+  clones the desired-state repository and uses `kubectl` to apply the Argo CD
+  installation and root `Application`.
+- **Ongoing reconciliation:** Argo CD takes over and continuously compares the
+  remote desired-state repository with the observed cluster, reconciling the
+  difference. It does not write changes back to GitHub.
+- **Two ApplicationSets:** The desired-state repository owns the bootstrap
+  ApplicationSet for cluster support and the environment ApplicationSet for
+  application delivery. The latter generates the Argo application that selects
+  the initialization and runtime Helm sources.
+- **Three Helm charts:** The Helm chart repository owns the bootstrap, init,
+  and runtime charts. The desired-state repository selects their immutable
+  release versions and environment values.
+- **Bootstrap chart:** Supports the private Tailscale-connected operator path,
+  including private ingress, Argo access, RBAC, CoreDNS customization, and
+  cluster security policy.
+- **Init chart:** Renders finite Jobs that prepare the database and load
+  external catalog data needed by the main application.
+- **Runtime chart:** Renders the main cluster resources and operating patterns:
+  the API, Redis, workers, dashboard, Services, Ingresses, ConfigMaps, and
+  recurring CronJobs.
+- **Environment Secret:** Credentials are supplied through the environment
+  contract and are intentionally not generated by this public documentation's
+  Helm diagram.
 
 ## Namespaces And Foundations
 
