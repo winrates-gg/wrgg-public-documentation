@@ -1,4 +1,4 @@
-# WR.GG Public Architecture Documentation
+# WINRATES.GG Public Architecture Documentation
 
 This repository presents a concise, production-focused view of the
 WINRATES.GG solution and architecture. It contains no credentials or deep
@@ -8,7 +8,9 @@ the backend code, the purpose-built rate-limiting solution for this product
 ([New Destiny](https://github.com/victorhaynes/new-destiny)), the hybrid-cloud
 infrastructure, and the Kubernetes cluster. The design favors a small operating footprint with scalable patterns and technologies to demonstrate skills in design, operation, and integration. It is not a demonstration of a globally redundant, highly available enterprise-scale platform. The product already incurs enough cost as it is :)
 
-Thank you for reading.
+`NOTE`  this repoistory will stop being public once it serves its purpose as part of my portfolio.
+
+Thank you for reading. 
 
 ## Concern Map
 
