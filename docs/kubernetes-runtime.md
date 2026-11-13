@@ -12,8 +12,11 @@ The responsibilities are split across multiple concerns:
 - Terraform and Ansible provide the cloud, host, network, storage, and access
   foundations.
 - `INTERNAL_REPOSITORY_1` defines Helm charts, defining the Kubernetes resources and their relationships.
-- `INTERNAL_REPOSITORY_2` uses Argo CD and acts as a callsite; selecting the exact helm chart, images, environment, and deployment scope.
-- Argo CD renders the selections and reconciles them into the cluster.
+- `INTERNAL_REPOSITORY_2` supplies the desired state and release selections.
+- EC2 user data provides the initial bootstrap gateway: it installs K3s and Argo
+  CD, clones the desired-state repository, and applies the root Argo resources.
+- Argo CD then renders the selected Helm sources and reconciles them into the
+  cluster.
 
 This document explains the primary cluster resource model and runtime behavior. The
 `backend` document explains application request and data flows; the CI/CD
@@ -29,6 +32,36 @@ The diagrams in this document use the shared architecture palette:
 | Green | Highlighted WR.GG application code/workload runtime (AWS or on-prem; see [Infrastructure](infrastructure.md)) |
 | Blue | AWS-hosted infrastructure |
 | Red | External services outside WR.GG's ownership |
+
+## Bootstrap Gateway And Reconciliation
+
+The cluster has a one-time bootstrap path and a separate steady-state
+reconciliation path. They are related, but they are not the same mechanism.
+
+During control-plane bootstrap, EC2 user data downloads the full bootstrap
+script from the environment's S3 bootstrap bucket, installs and starts K3s,
+retrieves the required credentials from SSM, and clones the GitHub desired-state
+repository to the control-plane host. It then uses `kubectl` to apply the Argo
+CD installation, repository credentials, and the environment's root
+`Application`.
+
+This is the initial gateway that makes Argo possible. The local repository clone
+is a bootstrap workspace containing manifests; it is not the application runtime
+and it is not the ongoing deployment engine. EC2 user data does not render the
+full application itself.
+
+Once Argo CD and the root `Application` exist, Argo's repo-server fetches the
+remote desired-state repository itself. The root `Application` loads the
+environment overlay, which creates the `ApplicationSet` resources. Those
+`ApplicationSet` resources generate the bootstrap and runtime Argo
+`Application`s, and Argo renders the pinned Helm charts and applies the
+resulting Kubernetes resources.
+
+Normal application changes therefore do not require EC2 to clone or apply the
+repository again. CI updates the desired state or release selection in GitHub,
+and Argo reconciles the existing cluster. Replacing the control-plane host
+repeats the bootstrap gateway, after which Argo reconstructs the selected
+cluster state from the remote repository.
 
 ## Cluster Network Boundary
 
@@ -90,12 +123,18 @@ and lifecycle are documented in [Infrastructure](infrastructure.md).
 
 ## Cluster Resource Composition
 
-The network diagram explains how traffic moves. This the primary cluster-design view. It displays shows how the Helm layers render into the cluster and how the cluster components relate to the
-desired-state inputs.
+The network diagram explains how traffic moves. This is the primary
+cluster-design view. It shows the initial EC2 bootstrap gateway, the Argo
+resources that take over reconciliation, and how the Helm layers render into
+the cluster.
 
 ```mermaid
 flowchart LR
-    Desired[k8s-live environment values]
+    BootstrapGateway[EC2 user-data bootstrap]
+    Clone[One-time Git clone]
+    Desired[GitHub desired-state repository]
+    RootApply[kubectl applies Argo CD + root Application]
+    Argo[Argo CD reconciliation loop]
     BootstrapSet[Bootstrap ApplicationSet]
     RuntimeSet[Runtime ApplicationSet]
     BootstrapChart[Bootstrap Helm chart]
@@ -126,8 +165,12 @@ flowchart LR
         DashboardResources["Deployments + Services + Ingress: dashboard"]
     end
 
-    Desired --> BootstrapSet
-    Desired --> RuntimeSet
+    BootstrapGateway --> Clone --> RootApply --> Argo
+    Desired --> Clone
+    Desired --> Argo
+    Argo -.-> Desired
+    Argo --> BootstrapSet
+    Argo --> RuntimeSet
     BootstrapSet --> BootstrapChart
     RuntimeSet --> InitChart
     RuntimeSet --> RuntimeChart
@@ -154,11 +197,20 @@ flowchart LR
     classDef app fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
     classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
 
-    class Desired,BootstrapSet,RuntimeSet,BootstrapChart,InitChart,RuntimeChart neutral
+    class Clone,Desired,RootApply,Argo,BootstrapSet,RuntimeSet,BootstrapChart,InitChart,RuntimeChart neutral
+    class BootstrapGateway aws
     class IngressController,IngressResources,AccessResources,DNSResource,Config neutral
     class Migration,Seed,DataInit,AssetInit,APIResource,MatchWorkers,LadderWorkers,Recurring,DashboardResources app
     class RedisResource aws
 ```
+
+The first path is the initial control-plane bootstrap: EC2 user data clones the
+desired-state repository and uses `kubectl` to install Argo CD and apply the
+root `Application`. The steady-state relationship begins once Argo exists: Argo's
+repo-server reads the remote repository, compares it with observed cluster
+state, and reconciles the difference. The dashed edge represents that repeated
+fetch-and-compare loop; it does not write changes back to GitHub. The EC2-local
+clone is not the ongoing source of reconciliation.
 
 The bootstrap chart is a separate cluster-support Application. The runtime
 ApplicationSet supplies two Helm sources: the initialization chart for finite
