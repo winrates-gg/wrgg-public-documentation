@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Kubernetes (K3S) is the container orchestration layer for WR.GG. It turns
+Kubernetes (K3s cluster) is the container orchestration layer for WR.GG. It turns
 immutable images and Helm templates into a running cluster, schedules workloads
 across hybrid-cloud nodes (AWS and an On-Prem data cener), and continually works to keep cluster state aligned
 with desired state.
@@ -11,25 +11,41 @@ The responsibilities are split across multiple concerns:
 
 - Terraform and Ansible provide the cloud, host, network, storage, and access
   foundations.
-- `INTERNAL_REPOSITORY_1` defines Helm charts, defining the Kubernetes objects and their relationships.
+- `INTERNAL_REPOSITORY_1` defines Helm charts, defining the Kubernetes resources and their relationships.
 - `INTERNAL_REPOSITORY_2` uses Argo CD and acts as a callsite; selecting the exact helm chart, images, environment, and deployment scope.
 - Argo CD renders the selections and reconciles them into the cluster.
 
-This document explains the primary cluster object model and runtime behavior. The
+This document explains the primary cluster resource model and runtime behavior. The
 `backend` document explains application request and data flows; the CI/CD
 document explains how artifacts and desired state are published.
 
-## Cluster Boundary
+### Diagram Legend
+
+The diagrams in this document use the shared architecture palette:
+
+| Color | Meaning |
+| --- | --- |
+| Gray | User-facing actors or boundaries |
+| Green | Highlighted WR.GG application code/workload runtime (AWS or on-prem; see [Infrastructure](infrastructure.md)) |
+| Blue | AWS-hosted infrastructure |
+| Red | External services outside WR.GG's ownership |
+
+## Cluster Network Boundary
+
+This first diagram is a highlevel networking overview. It shows how public API traffic and
+private operator traffic enter the cluster, the primary Services receive that
+traffic, and which runtime dependencies those workloads use. It is not a
+complete inventory of Kubernetes resources. See next diagram.
 
 ```mermaid
 flowchart LR
     Public[Public API traffic]
-    PublicIngress[K3s public ingress]
+    PublicIngress[K3s public ingress Traefik controller]
     BackendService[backend-svc]
     API[Backend API Deployment]
 
-    Operator[Private operator]
-    PrivateIngress[Private ingress controller]
+    Operator[Private/Interal Operator]
+    PrivateIngress[Private ingress Traefik controller]
     DashboardService[dashboard-svc]
     DashboardAPIService[dashboard-api-svc]
     Dashboard[Dashboard Deployment]
@@ -49,20 +65,110 @@ flowchart LR
     API --> Riot
     DashboardAPI --> Redis
     DashboardAPI --> PostgreSQL
+
+    classDef neutral fill:#f2f2f2,stroke:#858585,color:#202020
+    classDef app fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
+    classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
+    classDef external fill:#fde5e5,stroke:#c54b4b,color:#4a1717
+
+    class Public,PublicIngress,BackendService,Operator,PrivateIngress,DashboardService,DashboardAPIService neutral
+    class API,Dashboard,DashboardAPI app
+    class Redis,PostgreSQL aws
+    class Riot external
 ```
 
-The public API uses the cluster's public ingress path and routes through a
-ClusterIP Service to the backend API pods. The dashboard uses a separate
-private IngressClass and private ingress controller; its static bundle and
-dashboard API are separate workloads even though they are presented through
-the same private `/dashboard` surface.
+The public API uses the cluster's public ingress path, largely standard & bundled with K3s, and routes through a
+ClusterIP Service to the backend API pod(s). WR.GG has a supporting traffic & health private dashbaord that is accessed through a separate
+private IngressClass and private ingress controller.
 
-Redis and PostgreSQL have different roles. Redis is runtime coordination state
-for rate limiting, queue coordination, and dashboard metrics. PostgreSQL is
-durable product and queue state. S3 is the durable object boundary for match
+Redis is runtime coordination & state management system
+for rate limiting, Riot Games (external) API Health observations, and dashboard metrics. PostgreSQL is
+durable product data and runs outside of the cluster. S3 is the durable object boundary for match
 archives, static assets, releases, and generated SEO content. These external
 systems are shown here only to clarify the cluster boundary; their ownership
 and lifecycle are documented in [Infrastructure](infrastructure.md).
+
+## Cluster Resource Composition
+
+The network diagram explains how traffic moves. This the primary cluster-design view. It displays shows how the Helm layers render into the cluster and how the cluster components relate to the
+desired-state inputs.
+
+```mermaid
+flowchart LR
+    Desired[k8s-live environment values]
+    BootstrapSet[Bootstrap ApplicationSet]
+    RuntimeSet[Runtime ApplicationSet]
+    BootstrapChart[Bootstrap Helm chart]
+    InitChart[Init Helm chart]
+    RuntimeChart[Runtime Helm chart]
+
+    subgraph BootstrapResources[Bootstrap resources]
+        IngressController["Deployment: private-ingress-controller"]
+        IngressResources["IngressClass + private-argocd-ingress"]
+        AccessResources["ServiceAccount + RBAC + admission policy"]
+        DNSResource["ConfigMap: CoreDNS customization"]
+    end
+
+    subgraph InitResources[Initialization resources]
+        Migration["Job: database-migration"]
+        Seed["Job: database-seed"]
+        DataInit["Job: database-data-init"]
+        AssetInit["Jobs: initial asset refreshes"]
+    end
+
+    subgraph RuntimeResources[Runtime resources]
+        Config["ConfigMap: backend-config"]
+        RedisResource["Deployment + Service: Redis"]
+        APIResource["Deployment + Service + Ingress: backend API"]
+        MatchWorkers["Deployments: match worker per platform"]
+        LadderWorkers["Deployments: ladder worker per region"]
+        Recurring["CronJobs -> Jobs: data, assets, archives, analytics, SEO"]
+        DashboardResources["Deployments + Services + Ingress: dashboard"]
+    end
+
+    Desired --> BootstrapSet
+    Desired --> RuntimeSet
+    BootstrapSet --> BootstrapChart
+    RuntimeSet --> InitChart
+    RuntimeSet --> RuntimeChart
+
+    BootstrapChart --> IngressController
+    BootstrapChart --> IngressResources
+    BootstrapChart --> AccessResources
+    BootstrapChart --> DNSResource
+
+    InitChart --> Migration
+    InitChart --> Seed
+    InitChart --> DataInit
+    InitChart --> AssetInit
+
+    RuntimeChart --> Config
+    RuntimeChart --> RedisResource
+    RuntimeChart --> APIResource
+    RuntimeChart --> MatchWorkers
+    RuntimeChart --> LadderWorkers
+    RuntimeChart --> Recurring
+    RuntimeChart --> DashboardResources
+
+    classDef neutral fill:#f2f2f2,stroke:#858585,color:#202020
+    classDef app fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
+    classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
+
+    class Desired,BootstrapSet,RuntimeSet,BootstrapChart,InitChart,RuntimeChart neutral
+    class IngressController,IngressResources,AccessResources,DNSResource,Config neutral
+    class Migration,Seed,DataInit,AssetInit,APIResource,MatchWorkers,LadderWorkers,Recurring,DashboardResources app
+    class RedisResource aws
+```
+
+The bootstrap chart is a separate cluster-support Application. The runtime
+ApplicationSet supplies two Helm sources: the initialization chart for finite
+Jobs and the runtime chart for steady-state workloads. The environment values
+and selected release tags are supplied by `k8s-live`; they are not inferred by
+the chart.
+
+The chart also consumes an environment Secret for credentials. That Secret is
+part of the cluster's environment contract but is intentionally not generated
+by this public documentation's Helm diagram.
 
 ## Namespaces And Foundations
 
@@ -89,10 +195,10 @@ web entrypoint. Argo and the dashboard use the private entrypoint instead.
 
 ## Workload Model
 
-The runtime is composed from a small set of Kubernetes object types. Each type
+The runtime is composed from a small set of Kubernetes resource types. Each type
 has a different lifecycle and should not be treated as interchangeable.
 
-| Object type | WRGG role | Lifecycle |
+| Resource type | WRGG role | Lifecycle |
 | --- | --- | --- |
 | `Deployment` | Backend API, Redis, per-platform match workers, per-region ladder workers, dashboard, and dashboard API | Continuously maintains the requested pod count |
 | `Job` | Database migration, seed, data initialization, and initial asset refresh | Finite release or environment initialization task |
@@ -198,7 +304,7 @@ API and dashboard            wave 80
 recurring CronJobs           wave 90
 ```
 
-The important contract is not the exact number assigned to every object. The
+The important contract is not the exact number assigned to every resource. The
 contract is that schema and reference data precede workloads, Redis is present
 before components that depend on it, long-running workers start after their
 prerequisites, and recurring jobs are not confused with initialization.
@@ -219,12 +325,12 @@ problems:
 - **Deployment controllers** maintain the requested replica sets for the API,
   Redis, dashboard, and long-running workers.
 - **Job and CronJob controllers** create and track finite processing tasks.
-- **Ingress controllers** watch Ingress and Service objects and configure the
+- **Ingress controllers** watch Ingress and Service resources and configure the
   relevant HTTP entrypoint.
 
 Argo is therefore not the same thing as the Kubernetes scheduler, and a Helm
 chart is not the same thing as a running workload. Helm renders the requested
-objects; the controllers make those objects observable in the cluster.
+resources; the controllers make those resources observable in the cluster.
 
 ## Failure Boundaries
 

@@ -126,7 +126,7 @@ The diagrams in this document use the shared architecture palette:
 | Color | Meaning |
 | --- | --- |
 | Gray | User-facing actors or boundaries |
-| Green | Highlighted WR.GG application code/workload runtime (AWS or on-prem see: [INFRA link?]) |
+| Green | Highlighted WR.GG application code/workload runtime (AWS or on-prem; see [Infrastructure](infrastructure.md)) |
 | Blue | AWS-hosted infrastructure |
 | Red | External services outside WR.GG's ownership |
 
