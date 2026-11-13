@@ -26,6 +26,17 @@ The frontend is organized around product route families rather than one
 component per API endpoint. Each route family owns its presentation and request
 lifecycle while the FastAPI API owns validation, freshness, and durable data.
 
+### Diagram Legend
+
+The diagrams in this document use the shared architecture palette:
+
+| Color | Meaning |
+| --- | --- |
+| Gray | User-facing actors or boundaries |
+| Green | Highlighted WR.GG application code/workload runtime (AWS or on-prem see: [INFRA link?]) |
+| Blue | AWS-hosted infrastructure |
+| Red | External services outside WR.GG's ownership |
+
 ```mermaid
 flowchart LR
     Browser[Browser]
@@ -57,6 +68,13 @@ flowchart LR
     Profiles --> Content
     Analytics --> Content
     Rankings --> Content
+
+    classDef user fill:#f2f2f2,stroke:#858585,color:#202020
+    classDef backend fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
+    classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
+    class Browser user
+    class Shell,Capabilities,Search,Profiles,Analytics,Rankings,Static,API backend
+    class Archives,Content aws
 ```
 
 | Route family | Primary routes | Primary API or content boundary |
@@ -92,6 +110,13 @@ flowchart LR
     S3 --> CDN
     CDN --> Browser
     SEO -->|current SEO objects and sitemap| S3
+
+    classDef user fill:#f2f2f2,stroke:#858585,color:#202020
+    classDef backend fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
+    classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
+    class Browser user
+    class Commit,Release,SEO backend
+    class S3,CDN aws
 ```
 
 The React artifact publishing surface writes an immutable release and then promotes the selected
@@ -136,6 +161,13 @@ flowchart LR
     Nginx --> API
     API --> Redis
     API --> DB
+
+    classDef user fill:#f2f2f2,stroke:#858585,color:#202020
+    classDef backend fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
+    classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
+    class Operator,Nginx user
+    class Source,Image,API backend
+    class Redis,DB aws
 ```
 
 The dashboard image contains only the static dashboard bundle. It is selected

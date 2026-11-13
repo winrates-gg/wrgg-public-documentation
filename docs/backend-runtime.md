@@ -118,6 +118,18 @@ The primary public endpoints users interact with:
 
 ### Diagram: Runtime Topology And Boundaries
 This diagram outlines the major conceptual boundaries with an emphasis on the main integration points for the backend concern: public delivery, cluster workload, Riot API access & rate limiting, data persistence, and durable artifacts. See the [cluster documentation](kubernetes-runtime.md) for detailed and more representative cluster design.
+
+### Diagram Legend
+
+The diagrams in this document use the shared architecture palette:
+
+| Color | Meaning |
+| --- | --- |
+| Gray | User-facing actors or boundaries |
+| Green | Highlighted WR.GG application code/workload runtime (AWS or on-prem see: [INFRA link?]) |
+| Blue | AWS-hosted infrastructure |
+| Red | External services outside WR.GG's ownership |
+
 ```mermaid
 flowchart LR
     Browser[Browser / UI User]
