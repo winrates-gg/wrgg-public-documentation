@@ -87,20 +87,9 @@ The diagrams in this document use the shared architecture palette:
 | Staging | `us-east-2` staging account | The same major environment shape for isolated testing and release validation |
 | CloudFront and certificate services | Global CloudFront services with supporting `us-east-1` provider resources | Public edge delivery, CloudFront certificates, WAF resources, and flat-rate plan integration |
 
-The current production and staging runtime roots both declare the same primary
-network shape:
-
-- one VPC with CIDR `10.10.0.0/16`;
-- one public subnet with CIDR `10.10.1.0/24` in `us-east-2a`;
-- one internet gateway and public route table;
-- one control-plane security group with public HTTP and HTTPS ingress;
-- one ARM64 `t4g.large` EC2 control plane; and
-- one attached PostgreSQL EBS volume in the same availability zone.
-
 The single-AZ, public-subnet design is intentional for the current small
-operating footprint. It provides a simple recovery path and low infrastructure
-cost rather than multi-AZ high availability. No private subnet, NAT gateway,
-or managed load balancer is declared in the current environment shape.
+operating footprint. It provides a simpler ops and low infrastructure
+cost rather than a multi-AZ high availability deployment. For this same reason an EIP is used to route to the control plane rather than a managed load balancer.
 
 ## Network And Compute
 
@@ -161,8 +150,6 @@ flowchart LR
     class Redis,RemoteHost,Tailscale runtime
 ```
 
-The network module intentionally remains small:
-
 | Resource | Production shape | Role |
 | --- | --- | --- |
 | VPC | `10.10.0.0/16` | Environment network boundary |
@@ -172,48 +159,53 @@ The network module intentionally remains small:
 | Security group | TCP 80 and 443 from the internet; unrestricted outbound traffic | Public web/API ingress while cluster and worker coordination use the private path |
 | Elastic IP | One associated with the control plane | Stable API origin and operational address |
 | EC2 instance | ARM64 Amazon Linux, `t4g.large` | K3s control plane and core cluster services |
-| Root EBS volume | Encrypted gp3, 30 GiB | EC2 operating system and host data |
-| Database EBS volume | Encrypted gp3, 75 GiB production and 50 GiB staging | PostgreSQL data mounted separately from the application host root volume |
 
 The on-premises host is a K3s worker. Ansible prepares it, uses the
-environment's SSM hybrid activation and Tailscale path, and attaches it to the
-selected control plane. It is reserved for non-critical throughput and
-background-processing workloads.
+environment's SSM hybrid activation and the Tailscale API, and attaches it to the
+selected control plane. It is reserved for non-critical workloads.
 
-## Storage And Artifact Resources
+## EBS Volumes
+
+EBS provides separate storage for the control-plane host and PostgreSQL. The
+database volume has its own lifecycle so database recovery does not depend on
+replacing the EC2 instance.
+
+| Volume | Contents | Lifecycle and recovery |
+| --- | --- | --- |
+| Root volume | EC2 operating system and host data | Encrypted gp3, `minimal` GBs; attached to the control-plane instance |
+| Database volume | PostgreSQL data | Encrypted gp3, `more` GBs in production and `fewer` GBs in staging; `prevent_destroy`, controlled adoption/restore, and one daily DLM snapshot around `03:00` UTC with the seven most recent retained |
+
+## Object Storage
 
 The bootstrap artifact-storage module creates private S3 buckets with
 server-side encryption and public-access blocking. CloudFront reads the public
 web origins through Origin Access Control rather than exposing the buckets
 directly.
 
-| Resource | Purpose | Lifecycle and access shape |
+| S3 store or object group | Contents | Important notes |
 | --- | --- | --- |
-| Site artifacts | React bundles, static pages, SEO HTML, `sitemap.xml`, and `ads.txt` | Versioned; CloudFront web origin; release objects expire after approximately 30 days |
-| Dashboard artifacts | Private dashboard release bundles and related artifacts | Versioned; retained through the dashboard release lifecycle; not a public site origin |
-| Icons and layouts | Champion, item, spell, profile, and layout assets | Non-versioned; CloudFront origin under `/icons/*` and `/layouts/*` |
-| Job workspace | Temporary worker output and S3 inventory reports | Non-versioned; temporary workspace expires after 7 days and inventory reports after 30 days |
+| Site artifacts | React bundles, static pages, SEO HTML, `sitemap.xml`, and `ads.txt` | Versioned CloudFront web origin; release objects expire after approximately 30 days |
+| Dashboard artifacts | Private dashboard release bundles and related artifacts | Versioned and retained through the dashboard release lifecycle; not a public site origin |
+| Icons and layouts | Champion, item, spell, profile, and layout assets | Non-versioned CloudFront origin under `/icons/*` and `/layouts/*` |
+| Job workspace | Temporary S3 staging objects, SEO artifacts, and S3 Inventory reports | Private and non-versioned; `temporary/` expires after 7 days, inventory reports after 30 days, and other prefixes are managed separately |
 | Match archives | Compressed match JSON served to the frontend | Non-versioned; application retention is based on match age, with a 120-day upload-age safety net and weekly inventory |
-| Timeline data | Private timeline and training data | Non-versioned; incomplete multipart uploads expire after 7 days |
 | EC2 bootstrap | Versioned user-data/bootstrap script | Private object read by the control-plane instance profile |
 
-The database volume is managed separately from the application runtime. Its
-Terraform module uses a `prevent_destroy` guard, supports controlled adoption or
-restore, and applies a daily EBS snapshot policy retaining seven snapshots by
-default. The current snapshot schedule is `03:00` UTC.
+## ECR
 
-## Container Artifact Resources
+Each environment has immutable ECR repositories for the deployable container
+artifacts:
 
-Each environment has immutable ECR repositories for:
+| Repository | Contents | Important notes |
+| --- | --- | --- |
+| Backend API | FastAPI application and its API runtime | Scans images on push; release tags are retained for promotion and rollback |
+| Backend worker | Match, ladder, maintenance, and other background worker runtime | Scans images on push; release tags are retained for promotion and rollback |
+| Dashboard | Private dashboard web server image | Scans images on push; release tags are retained for dashboard deployment and rollback |
 
-- the backend API image;
-- the backend worker image; and
-- the private dashboard image.
-
-Repositories scan images on push. Untagged images expire after approximately
-one day, while each repository keeps the most recent 20 release-tagged images.
-The production bootstrap also grants narrowly scoped promotion reads for the
-release workflows that need to promote or inspect artifacts.
+Untagged images expire after approximately one day, while each repository keeps
+the most recent 20 release-tagged images. The production bootstrap also grants
+narrowly scoped promotion reads for release workflows that need to promote or
+inspect artifacts.
 
 ## Public Delivery And DNS
 
@@ -235,24 +227,23 @@ The current WAF configuration provides CloudWatch metrics and sampled requests
 with an allow-by-default action; it is an attached edge capability rather than
 the application's primary rate-limiting system.
 
-## Identity And Operations
+## Access And Operations
 
 The infrastructure uses separate roles for separate access paths:
 
-- the EC2 instance profile provides SSM management, ECR image pulls, and
-  narrowly scoped access to required S3 artifacts;
-- the SSM hybrid managed-node role supports the on-prem host;
+- EC2 instance profile provides SSM management, ECR image pulls, and
+  narrowly scoped access to required S3 artifacts
+- The SSM hybrid managed-node role supports the on-prem host
 - GitHub Actions roles publish frontend artifacts, backend images, and the
-  dashboard image without storing long-lived repository credentials;
-- the control plane and selected worker workloads receive only the S3 access
-  needed for their job; and
+  dashboard image without storing long-lived repository credentials
+- The control plane and selected worker workloads receive only the S3 access
+  needed for their job
 - CloudWatch alarms notify through SNS for EC2 health, CPU, EBS queue and
-  throughput pressure, and host disk usage.
+  throughput pressure, and host disk usage
 
 EBS encryption is enabled by default in each environment account, individual
-EBS volumes are encrypted, and S3 buckets use server-side encryption. Public
-web traffic is handled by CloudFront; cluster and worker coordination uses
-Tailscale rather than public Kubernetes control-plane exposure.
+EBS volumes are encrypted, and S3 buckets use server-side encryption. Cluster and worker coordination uses
+Tailscale rather than public Kubernetes control-plane exposure or the AWS private network.
 
 ## Terraform Composition
 
@@ -273,7 +264,7 @@ reconciliation. Ansible owns the worker host and its environment
 attachment. Application image selection belongs to the Kubernetes desired-state
 repository and release workflows rather than to this infrastructure layer.
 
-## Deliberate Tradeoffs
+## Design Choices
 
 - One public subnet and one availability zone keep the deployment inexpensive
   and easy to recover, but do not provide multi-AZ infrastructure resilience.
@@ -281,7 +272,7 @@ repository and release workflows rather than to this infrastructure layer.
   recovery operations to remain independent from EC2 replacement.
 - CloudFront separates public edge delivery from the API origin and keeps S3
   buckets private behind Origin Access Control.
-- The on-prem worker adds throughput without becoming a dependency for the API
+- The on-prem worker adds computing capacity without becoming a dependency for the API
   or primary data services.
 - Staging mirrors the production resource shape so deployment behavior can be
   tested without maintaining a second infrastructure design.
