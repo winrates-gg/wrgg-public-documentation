@@ -11,27 +11,51 @@ artifacts or selects the application release that is running.
 ## Production Shape
 
 ```mermaid
-flowchart LR
-    Management[Management account]
-    Production[Production account]
-    Staging[Staging account]
-    Terraform[Terraform live roots]
-    AWS[AWS resources]
-    Control[ARM64 EC2 K3s control plane]
-    Worker[Optional on-prem Linux worker]
-    Ansible[Ansible attachment path]
-    SSM[AWS Systems Manager]
-    Tailscale[Tailscale private network]
+flowchart TB
+    subgraph AWS["AWS / Cloud"]
+        direction TB
+        subgraph Organization["WR.GG AWS Organization"]
+            direction TB
+            subgraph Management["Management account"]
+                direction LR
+                ManagementServices["Domain and organization services"]
+            end
 
-    Management --> Production
-    Management --> Staging
-    Terraform --> AWS
-    AWS --> Control
-    Ansible --> SSM
-    Ansible --> Tailscale
-    SSM --> Worker
-    Tailscale --> Worker
-    Worker --> Control
+            subgraph Production["Production account"]
+                direction LR
+                ProductionTerraform["Terraform live root"]
+                ProductionResources["VPC, EC2, EBS, S3, CloudFront, ECR, and IAM"]
+                ProductionControl["ARM64 EC2 K3s control plane"]
+                ProductionSSM["AWS Systems Manager"]
+                ProductionTerraform --> ProductionResources
+                ProductionResources --> ProductionControl
+            end
+
+            subgraph Staging["Staging account"]
+                direction LR
+                StagingTerraform["Terraform live root"]
+                StagingResources["Environment-specific AWS resources"]
+                StagingControl["ARM64 EC2 K3s control plane"]
+                StagingSSM["AWS Systems Manager"]
+                StagingTerraform --> StagingResources
+                StagingResources --> StagingControl
+            end
+        end
+    end
+
+    subgraph OnPrem["On-premises data center"]
+        direction LR
+        Ansible["Ansible attachment path"]
+        RemoteHost["Optional remote Linux host"]
+        Tailscale["Tailscale private network"]
+        Ansible --> RemoteHost
+        Tailscale --- RemoteHost
+    end
+
+    ProductionSSM -. hybrid activation .-> Ansible
+    StagingSSM -. hybrid activation .-> Ansible
+    RemoteHost -. K3s worker attachment .-> ProductionControl
+    RemoteHost -. K3s worker attachment .-> StagingControl
 ```
 
 Production is the reference architecture. Staging uses the same shape in a
