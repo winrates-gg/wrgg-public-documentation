@@ -1,6 +1,6 @@
 # CI/CD And Release
 
-## Purpose
+## High Level Overview
 
 CI/CD turns validated source into immutable artifacts and promotes those
 artifacts through desired state. It does not create the AWS foundation or

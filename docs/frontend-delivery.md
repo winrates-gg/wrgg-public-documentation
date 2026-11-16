@@ -1,6 +1,6 @@
 # Frontend Delivery
 
-## Purpose
+## High Level Overview
 
 The `frontend` spans two primary delivery products:
 

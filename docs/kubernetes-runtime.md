@@ -1,6 +1,6 @@
 # Kubernetes - Cluster Design, Resources, Networing, and Security
 
-## Purpose
+## High Level Overview
 
 Kubernetes (K3s cluster) is the container orchestration layer for WR.GG. It turns
 immutable images and Helm templates into a running cluster, schedules workloads

@@ -1,6 +1,6 @@
 # Infrastructure Resource Topology
 
-## Purpose
+## High Level Overview
 
 This document describes the declared production infrastructure at the resource
 level. It complements the higher-level [Infrastructure](infrastructure.md)
