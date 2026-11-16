@@ -4,7 +4,7 @@
 
 Infrastructure provides the cloud, network, storage, host, and access
 foundations that the application runs on. Terraform owns AWS resources and
-state. Ansible owns the optional on-prem worker's host lifecycle and its
+state. Ansible owns the on-prem worker's host lifecycle and its
 attachment to the selected environment. Neither system builds application
 artifacts or selects the application release that is running.
 
@@ -46,16 +46,16 @@ flowchart TB
     subgraph OnPrem["On-premises data center"]
         direction LR
         Ansible["Ansible attachment path"]
-        RemoteHost["Optional remote Linux host"]
-        Tailscale["Tailscale private network"]
+        RemoteHost["Remote Linux host"]
         Ansible --> RemoteHost
-        Tailscale --- RemoteHost
     end
 
+    Tailscale["WR.GG Tailscale tailnet"]
     ProductionSSM -. hybrid activation .-> Ansible
     StagingSSM -. hybrid activation .-> Ansible
-    RemoteHost -. K3s worker attachment .-> ProductionControl
-    RemoteHost -. K3s worker attachment .-> StagingControl
+    Tailscale --- ProductionControl
+    Tailscale --- StagingControl
+    Tailscale --- RemoteHost
 ```
 
 Production is the reference architecture. Staging uses the same shape in a
@@ -86,8 +86,8 @@ The detailed production resource inventory is documented in
 ## Host And Network Boundary
 
 The ARM64 EC2 host runs the K3s control plane and the services required for
-core application behavior. An optional on-prem Linux host joins the cluster as
-a worker for non-critical, throughput-oriented workloads such as queue
+core application behavior. The on-prem Linux host joins the cluster as a
+worker for non-critical, throughput-oriented workloads such as queue
 draining, ladder refresh, and recurring jobs.
 
 Ansible prepares the worker, registers it through a short-lived SSM hybrid
@@ -118,8 +118,8 @@ Terraform state answers what AWS infrastructure is currently owned. The live
 root and selected module version answer how that infrastructure is composed.
 Ansible attachment state answers how the on-prem worker is prepared and joined.
 
-Infrastructure failure can make the cluster, network, storage, or optional
-worker unavailable, but infrastructure does not decide which application
+Infrastructure failure can make the cluster, network, storage, or worker
+unavailable, but infrastructure does not decide which application
 artifact is healthy. Application release selection and rollback belong to
 [CI/CD and release](ci-cd.md), while runtime reconciliation belongs to
 [Kubernetes runtime](kubernetes-runtime.md).

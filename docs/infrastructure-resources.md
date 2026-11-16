@@ -46,12 +46,7 @@ flowchart TB
 
             subgraph Staging["Staging account"]
                 direction LR
-                StagingBootstrap["Artifact storage, ECR, and ACM"]
-                StagingNetwork["VPC, public subnet, routes, and security group"]
-                StagingCompute["ARM64 EC2 K3s control plane"]
-                StagingData["PostgreSQL EBS volume and DLM snapshots"]
-                StagingDelivery["CloudFront, Route 53, WAF, and DNS"]
-                StagingOperations["IAM, SSM, CloudWatch, and SNS"]
+                StagingShape["Ephemeral environment\nsymmetrical to production"]
             end
         end
     end
@@ -59,16 +54,14 @@ flowchart TB
     subgraph OnPrem["On-premises data center"]
         direction LR
         Ansible["Ansible attachment path"]
-        Tailscale["Tailscale private network"]
-        RemoteHost["Optional remote Linux worker"]
+        RemoteHost["Remote Linux worker"]
         Ansible --> RemoteHost
-        Tailscale --- RemoteHost
     end
 
+    Tailscale["WR.GG Tailscale tailnet"]
     ProductionOperations -.-> Ansible
-    StagingOperations -.-> Ansible
-    RemoteHost -.-> ProductionCompute
-    RemoteHost -.-> StagingCompute
+    Tailscale --- ProductionCompute
+    Tailscale --- RemoteHost
 
     classDef neutral fill:#f3f4f6,stroke:#6b7280,color:#111827
     classDef aws fill:#dbeafe,stroke:#2563eb,color:#111827
@@ -77,9 +70,9 @@ flowchart TB
 
     class ManagementState,ManagementOps,Ansible neutral
     class ProductionBootstrap,ProductionNetwork,ProductionCompute,ProductionData,ProductionDelivery,ProductionOperations aws
-    class StagingBootstrap,StagingNetwork,StagingCompute,StagingData,StagingDelivery,StagingOperations aws
+    class StagingShape neutral
     class RemoteHost runtime
-    class Tailscale external
+    class Tailscale runtime
 ```
 
 ### Diagram Legend
@@ -89,7 +82,7 @@ The diagrams in this document use the shared architecture palette:
 | Color | Meaning |
 | --- | --- |
 | Gray | Neutral actors, boundaries, orchestration, and configuration concepts |
-| Green | Highlighted WR.GG application code or workload runtime |
+| Green | WR.GG-owned workload runtime and private-network components |
 | Blue | AWS-hosted infrastructure |
 | Red | External services outside WR.GG's ownership |
 
@@ -145,8 +138,8 @@ flowchart LR
     end
 
     Redis["Redis deployment\ninside K3s"]
-    RemoteHost["Optional on-prem\nLinux worker"]
-    Tailscale["Tailscale private network"]
+    RemoteHost["Remote on-prem\nLinux worker"]
+    Tailscale["WR.GG Tailscale tailnet"]
     Operations["CloudWatch and SNS"]
 
     Browser --> DNS
@@ -162,8 +155,8 @@ flowchart LR
     RouteTable --> ControlPlane
     ControlPlane --> Database
     ControlPlane --> Redis
+    Tailscale --- ControlPlane
     Tailscale --- RemoteHost
-    RemoteHost -.-> ControlPlane
     ControlPlane --> Operations
 
     classDef neutral fill:#f3f4f6,stroke:#6b7280,color:#111827
@@ -173,8 +166,7 @@ flowchart LR
 
     class Browser neutral
     class DNS,WebCDN,APICDN,ACM,Site,Icons,Archives,IGW,RouteTable,ControlPlane,Database,Operations aws
-    class Redis,RemoteHost runtime
-    class Tailscale external
+    class Redis,RemoteHost,Tailscale runtime
 ```
 
 The network module intentionally remains small:
@@ -191,7 +183,7 @@ The network module intentionally remains small:
 | Root EBS volume | Encrypted gp3, 30 GiB | EC2 operating system and host data |
 | Database EBS volume | Encrypted gp3, 75 GiB production and 50 GiB staging | PostgreSQL data mounted separately from the application host root volume |
 
-The on-premises host is an optional K3s worker. Ansible prepares it, uses the
+The on-premises host is a K3s worker. Ansible prepares it, uses the
 environment's SSM hybrid activation and Tailscale path, and attaches it to the
 selected control plane. It is reserved for non-critical throughput and
 background-processing workloads.
@@ -257,7 +249,7 @@ The infrastructure uses separate roles for separate access paths:
 
 - the EC2 instance profile provides SSM management, ECR image pulls, and
   narrowly scoped access to required S3 artifacts;
-- the SSM hybrid managed-node role supports the optional on-prem host;
+- the SSM hybrid managed-node role supports the on-prem host;
 - GitHub Actions roles publish frontend artifacts, backend images, and the
   dashboard image without storing long-lived repository credentials;
 - the control plane and selected worker workloads receive only the S3 access
@@ -285,7 +277,7 @@ roots:
 
 Terraform owns the declared AWS resource state. EC2 user data creates the first
 K3s control-plane path, while Kubernetes and Argo CD later own cluster resource
-reconciliation. Ansible owns the optional worker host and its environment
+reconciliation. Ansible owns the worker host and its environment
 attachment. Application image selection belongs to the Kubernetes desired-state
 repository and release workflows rather than to this infrastructure layer.
 
