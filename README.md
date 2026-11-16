@@ -13,11 +13,12 @@ infrastructure, and the Kubernetes cluster. The design favors a small operating 
 Thank you for reading. 
 
 ## Concern Map
-
+In order of interest.
 | Concern | Answers | Documentation |
 | --- | --- | --- |
-| Backend | How does the API acquire, protect, process, and serve Riot data? | [Backend runtime](docs/backend-runtime.md) |
-| Frontend | How are the public site, SEO objects, and private dashboard delivered? | [Frontend delivery](docs/frontend-delivery.md) |
-| Infrastructure | What cloud, storage, host, network, and access foundations exist? | [Infrastructure](docs/infrastructure.md) |
+| Infrastructure | What are the AWS, on-premises, and hybrid-network boundaries, and how are they connected? | [Infrastructure](docs/infrastructure.md) |
+| Resources | What individual AWS resources make up the production deployment, and how are their storage, delivery, access, and lifecycle details configured? | [Infrastructure resource topology](docs/infrastructure-resources.md) |
 | Kubernetes | How are cluster resources composed, scheduled, and reconciled? | [Kubernetes runtime](docs/kubernetes-runtime.md) |
+| Backend | How does the API acquire, protect, process, and serve Riot data? | [Backend runtime](docs/backend-runtime.md) |
 | CI/CD | How does validated source become an immutable production release? | [CI/CD and release](docs/ci-cd.md) |
+| Frontend | How are the public site, SEO objects, and private dashboard delivered? | [Frontend delivery](docs/frontend-delivery.md) |
