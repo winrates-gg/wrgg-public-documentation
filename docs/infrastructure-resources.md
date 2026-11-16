@@ -7,14 +7,6 @@ level. It complements the higher-level [Infrastructure](infrastructure.md)
 overview by showing the AWS accounts, regional resources, network shape,
 storage, delivery surfaces, and operational services that support WR.GG.
 
-The document is a code-derived architecture summary rather than a live AWS
-inventory. It intentionally omits account IDs, ARNs, bucket names, hostnames,
-state locations, and other operator-specific identifiers.
-
-Production is the reference shape. Staging uses the same major resource
-composition in a separate account, with smaller storage and environment-specific
-identity, domains, credentials, data, and release settings.
-
 ## Resource Containment
 
 The account boundaries describe ownership. The resource groups inside each
