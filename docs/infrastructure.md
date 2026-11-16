@@ -80,6 +80,9 @@ production resource concerns include:
 The exact account identifiers, names, addresses, and state locations are not
 part of this public documentation.
 
+The detailed production resource inventory is documented in
+[Infrastructure Resource Topology](infrastructure-resources.md).
+
 ## Host And Network Boundary
 
 The ARM64 EC2 host runs the K3s control plane and the services required for
