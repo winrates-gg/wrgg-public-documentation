@@ -99,18 +99,23 @@ their environment-specific plan path rather than through Argo.
 CD selects immutable releases and delivers them through the mechanism owned by
 that concern.
 
+The CD diagram uses the shared architecture palette: gray marks release
+identities and desired state, green marks the active Argo and Kubernetes
+runtime path, and blue marks AWS-hosted infrastructure. This view does not
+include a red external-service node.
+
 ```mermaid
-flowchart TB
-    subgraph TerraformLane["TERRAFORM RELEASE"]
-        direction LR
-        TerraformArtifact["Immutable Terraform release"] --> TerraformApply["Environment plan and apply"]
-    end
+flowchart LR
+    subgraph AutomationFlows["AUTOMATION FLOWS"]
+        direction TB
 
-    subgraph DeliveryTargets[" "]
-        direction LR
-
-        subgraph ReleaseFlows["GITHUB RELEASE FLOWS"]
+        subgraph GithubActions["GITHUB ACTIONS"]
             direction TB
+
+            subgraph TerraformLane["TERRAFORM RELEASE"]
+                direction LR
+                TerraformArtifact["Immutable Terraform release"] --> TerraformApply["Environment plan and apply"]
+            end
 
             subgraph FrontendLane["FRONTEND RELEASE"]
                 direction LR
@@ -125,6 +130,15 @@ flowchart TB
             end
         end
 
+        subgraph AnsibleLane["ANSIBLE HOST OPERATIONS"]
+            direction LR
+            Ansible["Ansible playbook"] --> HostPreparation["Prepare and attach host"]
+        end
+    end
+
+    subgraph InfrastructureTargets["INFRASTRUCTURE TARGETS"]
+        direction TB
+
         subgraph AWSInfra["AWS INFRASTRUCTURE"]
             direction TB
 
@@ -136,30 +150,37 @@ flowchart TB
                 Argo["Argo CD"] --> Runtime["Kubernetes Cluster State"]
             end
         end
+
+        subgraph OnPrem["ON-PREM HOST"]
+            RemoteHost["Reclaimed Linux laptop"]
+        end
     end
 
     TerraformApply --> AWSInfra
     FrontendPublish --> SiteBucket
     Desired --> Argo
+    HostPreparation --> RemoteHost
 
-    classDef release fill:#f2f2f2,stroke:#858585,color:#202020
-    classDef delivery fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
-    classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
     classDef neutral fill:#f2f2f2,stroke:#858585,color:#202020
+    classDef runtime fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
+    classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
 
-    class TerraformArtifact,FrontendArtifact,BackendArtifact,DashboardArtifact,ChartArtifact release
-    class TerraformApply delivery
+    class TerraformArtifact,FrontendArtifact,BackendArtifact,DashboardArtifact,ChartArtifact neutral
+    class TerraformApply,FrontendPublish,Desired,Ansible,HostPreparation neutral
+    class Argo,Runtime runtime
     class SiteBucket,ControlPlane aws
-    class Argo,Runtime delivery
-    class Desired neutral
-    style DeliveryTargets fill:none,stroke:none
+    class RemoteHost runtime
+    style AutomationFlows fill:none,stroke:none
+    style GithubActions fill:#f2f2f2,stroke:#858585,color:#202020
     style TerraformLane fill:none,stroke:none
-    style ReleaseFlows fill:none,stroke:none
     style FrontendLane fill:none,stroke:none
     style RuntimeLane fill:none,stroke:none
+    style AnsibleLane fill:none,stroke:none
+    style InfrastructureTargets fill:none,stroke:none
     style AWSInfra fill:#e5efff,stroke:#4c78b8,color:#162a47
     style PublicSite fill:#e5efff,stroke:#4c78b8,color:#162a47
     style ControlPlane fill:#e5efff,stroke:#4c78b8,color:#162a47
+    style OnPrem fill:#f2f2f2,stroke:#858585,color:#202020
 ```
 
 Terraform applies AWS infrastructure directly. The frontend release is
@@ -168,7 +189,9 @@ distribution serves that bucket as the public edge. The current frontend
 workflow does not change the CloudFront distribution or issue a CloudFront
 invalidation. Backend, dashboard, and Helm releases are selected together in
 GitOps desired state; Argo renders the pinned chart and reconciles the resulting
-Kubernetes resources on the ARM64 EC2 control plane.
+Kubernetes resources on the ARM64 EC2 control plane. Ansible prepares and
+attaches the on-prem host as an operational concern outside the immutable
+application release path.
 
 ## Repository Responsibilities
 
