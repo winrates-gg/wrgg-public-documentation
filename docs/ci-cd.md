@@ -20,7 +20,7 @@ flowchart LR
     Dashboard[Dashboard image]
     Chart[Helm chart release]
     Desired[Environment desired state]
-    Web[Public S3 and CloudFront delivery]
+    Web[Public S3 delivery]
     Argo[Argo CD]
     Runtime[Running production state]
 
@@ -100,33 +100,51 @@ CD selects immutable releases and delivers them through the mechanism owned by
 that concern.
 
 ```mermaid
-flowchart LR
-    TerraformArtifact["Immutable Terraform release"] --> TerraformApply["Environment plan and apply"] --> AWS["AWS infrastructure"]
+flowchart TB
+    subgraph TerraformLane["TERRAFORM RELEASE"]
+        direction LR
+        TerraformArtifact["Immutable Terraform release"] --> TerraformApply["Environment plan and apply"] --> AWSInfra["AWS infrastructure"]
+    end
 
-    FrontendArtifact["Immutable frontend S3 release"] --> SiteBucket["Public site bucket"] --> CloudFront["CloudFront"]
-    AWS --> CloudFront
+    subgraph FrontendLane["FRONTEND RELEASE"]
+        direction LR
+        FrontendArtifact["Immutable frontend S3 release"] --> SiteBucket["Public site bucket"]
+    end
 
-    BackendArtifact["Immutable API and worker image"] --> Desired["GitOps environment desired state"]
-    DashboardArtifact["Immutable dashboard image"] --> Desired
-    ChartArtifact["Immutable Helm chart release"] --> Desired
-    Desired --> Argo["Argo CD"] --> Runtime["Kubernetes runtime"]
+    subgraph RuntimeLane["EC2 / KUBERNETES RELEASE"]
+        direction LR
+        BackendArtifact["Immutable API and worker image"] --> Desired["GitOps environment desired state"]
+        DashboardArtifact["Immutable dashboard image"] --> Desired
+        ChartArtifact["Immutable Helm chart release"] --> Desired
+        Desired --> Argo["Argo CD"]
 
-    classDef artifact fill:#e5efff,stroke:#4c78b8,color:#162a47
+        subgraph ControlPlane["ARM64 EC2 control plane"]
+            Argo --> Runtime["Kubernetes runtime"]
+        end
+    end
+
+    classDef release fill:#f2f2f2,stroke:#858585,color:#202020
     classDef delivery fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
     classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
     classDef neutral fill:#f2f2f2,stroke:#858585,color:#202020
 
-    class TerraformArtifact,FrontendArtifact,BackendArtifact,DashboardArtifact,ChartArtifact artifact
-    class TerraformApply,SiteBucket,Argo,Runtime delivery
-    class AWS,CloudFront aws
+    class TerraformArtifact,FrontendArtifact,BackendArtifact,DashboardArtifact,ChartArtifact release
+    class TerraformApply delivery
+    class AWSInfra,SiteBucket,ControlPlane aws
+    class Argo,Runtime delivery
     class Desired neutral
+    style TerraformLane fill:none,stroke:none
+    style FrontendLane fill:none,stroke:none
+    style RuntimeLane fill:none,stroke:none
 ```
 
 Terraform applies AWS infrastructure directly. The frontend release is
-published to S3 and served through CloudFront without a Kubernetes rollout.
-Backend, dashboard, and Helm releases are selected together in GitOps desired
-state; Argo renders the pinned chart and reconciles the resulting Kubernetes
-resources.
+published to S3 without a Kubernetes rollout; the existing CloudFront
+distribution serves that bucket as the public edge. The current frontend
+workflow does not change the CloudFront distribution or issue a CloudFront
+invalidation. Backend, dashboard, and Helm releases are selected together in
+GitOps desired state; Argo renders the pinned chart and reconciles the resulting
+Kubernetes resources on the ARM64 EC2 control plane.
 
 ## Repository Responsibilities
 
