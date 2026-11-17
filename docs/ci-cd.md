@@ -2,58 +2,29 @@
 
 ## High Level Overview
 
-CI/CD turns validated source into immutable artifacts and delivers them through
-the appropriate promotion path: direct web publication, infrastructure apply,
-or Kubernetes desired state. It does not create the AWS foundation or directly
-manage running Kubernetes resources.
+WR.GG's CI/CD process turns validated source code into immutable releases and
+delivers each concern through its appropriate promotion path: Terraform applies
+AWS infrastructure, the frontend is published directly to S3 (object storage), and the backend,
+dashboard, and Helm releases are integrated with the Kubernetes cluster by uploading them to ECR (image repository) and mutating Argo CD's desired state pointers.
 
-## Release Lifecycle
-
-```mermaid
-flowchart LR
-    BackendSource[Validated backend source commit]
-    FrontendSource[Validated frontend source commit]
-    DashboardSource[Validated dashboard source commit]
-    ChartSource[Validated Helm source commit]
-    Backend[Backend and worker image]
-    Frontend[Frontend S3 release]
-    Dashboard[Dashboard image]
-    Chart[Helm chart release]
-    Desired[Environment desired state]
-    Web[Public S3 delivery]
-    Argo[Argo CD]
-    Runtime[Running production state]
-
-    BackendSource --> Backend
-    FrontendSource --> Frontend
-    DashboardSource --> Dashboard
-    ChartSource --> Chart
-    Backend --> Desired
-    Frontend --> Web
-    Dashboard --> Desired
-    Chart --> Desired
-    Desired --> Argo
-    Web --> Runtime
-    Argo --> Runtime
-```
+## Release Model
 
 The system keeps four identities separate:
 
-- **Source history:** the code that was written and validated.
+- **Source history:** the code that was written, validated, and tested.
 - **Artifact history:** the backend, frontend, dashboard, or chart that was
   built and published.
 - **Desired state:** the exact releases an environment is requested to run.
 - **Observed state:** what Argo, Kubernetes, AWS, and the private dashboard
   report about the running system.
 
-Building an artifact does not deploy it. Selecting an artifact in desired state
-does not rebuild it. Argo reconciles the selected state.
+Building an artifact does not necessarily deploy it. For example new `backend` API images can be uploaded to ECR without mutating a currently running cluster.
 
 ## Continuous Integration
 
-CI validates source in the repository that owns the concern and publishes an
-immutable release when that concern is ready. The frontend repository has two
-release outputs: the public static site and the private dashboard image.
+CI is primarily responsible for validating source code in the various repositories that own a
+concern. At operator-specified times, CI publishes an immutable release, marking code
+deployable.
 
 ```mermaid
 flowchart TB
@@ -88,110 +59,99 @@ flowchart TB
     class BackendArtifact,FrontendArtifact,DashboardArtifact,ChartArtifact,TerraformArtifact artifact
 ```
 
-The four application and chart releases are intentionally separate identities.
-The backend release contains both the API and worker image, while the frontend
-repository produces both the public static release and the dashboard image.
-Terraform releases remain an infrastructure concern and are applied through
-their environment-specific plan path rather than through Argo.
-
 ## Continuous Delivery
 
 CD selects immutable releases and delivers them through the mechanism owned by
-that concern.
+that concern. This is an explict operator action rather than a fully automated or "touchless" delivery system.
 
 The CD diagram uses the shared architecture palette: gray marks release
-identities and desired state, green marks the active Argo and Kubernetes
-runtime path, and blue marks AWS-hosted infrastructure. This view does not
-include a red external-service node.
+identities and desired state, green marks the active Argo, Kubernetes, and
+on-prem runtime paths, and blue marks AWS-hosted infrastructure.
 
 ```mermaid
 flowchart LR
-    subgraph AutomationFlows["AUTOMATION FLOWS"]
+    subgraph ReleaseFlows["GITHUB RELEASE FLOWS"]
         direction TB
 
-        subgraph GithubActions["GITHUB ACTIONS"]
-            direction TB
-
-            subgraph TerraformLane["TERRAFORM RELEASE"]
-                direction LR
-                TerraformArtifact["Immutable Terraform release"] --> TerraformApply["Environment plan and apply"]
-            end
-
-            subgraph FrontendLane["FRONTEND RELEASE"]
-                direction LR
-                FrontendArtifact["Immutable frontend S3 release"] --> FrontendPublish["Publish to S3"]
-            end
-
-            subgraph RuntimeLane["EC2 / KUBERNETES RELEASE"]
-                direction LR
-                BackendArtifact["Immutable API and worker image"] --> Desired["GitOps environment desired state"]
-                DashboardArtifact["Immutable dashboard image"] --> Desired
-                ChartArtifact["Immutable Helm chart release"] --> Desired
-            end
+        subgraph TerraformLane["TERRAFORM RELEASE"]
+            direction LR
+            TerraformArtifact["Immutable Terraform release"] --> TerraformApply["Environment plan and apply"]
         end
 
-        subgraph AnsibleLane["ANSIBLE HOST OPERATIONS"]
+        subgraph FrontendLane["FRONTEND RELEASE"]
             direction LR
-            Ansible["Ansible playbook"] --> HostPreparation["Prepare and attach host"]
+            FrontendArtifact["Immutable frontend S3 release"] --> FrontendPublish["Publish to S3"]
+        end
+
+        subgraph RuntimeLane["CLUSTER-RELEVANT RELEASES"]
+            direction LR
+            BackendArtifact["Immutable API and worker image"] --> Desired["GitOps environment desired state"]
+            DashboardArtifact["Immutable dashboard image"] --> Desired
+            ChartArtifact["Immutable Helm chart release"] --> Desired
         end
     end
 
-    subgraph InfrastructureTargets["INFRASTRUCTURE TARGETS"]
+    subgraph AWSInfra["AWS INFRASTRUCTURE"]
         direction TB
 
-        subgraph AWSInfra["AWS INFRASTRUCTURE"]
-            direction TB
-
-            subgraph PublicSite["PUBLIC STATIC SITE"]
-                SiteBucket["Public S3 Bucket"]
-            end
-
-            subgraph ControlPlane["ARM64 EC2 CONTROL PLANE"]
-                Argo["Argo CD"] --> Runtime["Kubernetes Cluster State"]
-            end
+        subgraph PublicSite["PUBLIC STATIC SITE"]
+            SiteBucket["Public S3 Bucket"]
         end
 
-        subgraph OnPrem["ON-PREM HOST"]
-            RemoteHost["Reclaimed Linux laptop"]
+        subgraph ControlPlane["EC2 CONTROL PLANE"]
+            Argo["Argo CD"] --> Runtime["Kubernetes Cluster State"]
         end
     end
 
     TerraformApply --> AWSInfra
     FrontendPublish --> SiteBucket
     Desired --> Argo
-    HostPreparation --> RemoteHost
 
     classDef neutral fill:#f2f2f2,stroke:#858585,color:#202020
     classDef runtime fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
     classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
 
     class TerraformArtifact,FrontendArtifact,BackendArtifact,DashboardArtifact,ChartArtifact neutral
-    class TerraformApply,FrontendPublish,Desired,Ansible,HostPreparation neutral
+    class TerraformApply,FrontendPublish,Desired neutral
     class Argo,Runtime runtime
     class SiteBucket,ControlPlane aws
-    class RemoteHost runtime
-    style AutomationFlows fill:none,stroke:none
-    style GithubActions fill:#f2f2f2,stroke:#858585,color:#202020
+    style ReleaseFlows fill:none,stroke:none
     style TerraformLane fill:none,stroke:none
     style FrontendLane fill:none,stroke:none
     style RuntimeLane fill:none,stroke:none
-    style AnsibleLane fill:none,stroke:none
-    style InfrastructureTargets fill:none,stroke:none
     style AWSInfra fill:#e5efff,stroke:#4c78b8,color:#162a47
     style PublicSite fill:#e5efff,stroke:#4c78b8,color:#162a47
     style ControlPlane fill:#e5efff,stroke:#4c78b8,color:#162a47
-    style OnPrem fill:#f2f2f2,stroke:#858585,color:#202020
+```
+
+```mermaid
+flowchart LR
+    subgraph AnsibleOps["ANSIBLE CONTROLLER OPERATIONS"]
+        direction LR
+        Ansible["Ansible playbook"]
+    end
+
+    subgraph OnPremInfra["ON-PREM INFRASTRUCTURE"]
+        direction LR
+        RemoteHost["On-prem host"]
+    end
+
+    Ansible --> RemoteHost
+
+    classDef neutral fill:#f2f2f2,stroke:#858585,color:#202020
+    classDef runtime fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
+
+    class Ansible neutral
+    class RemoteHost runtime
+    style AnsibleOps fill:none,stroke:none
+    style OnPremInfra fill:#f2f2f2,stroke:#858585,color:#202020
 ```
 
 Terraform applies AWS infrastructure directly. The frontend release is
-published to S3 without a Kubernetes rollout; the existing CloudFront
-distribution serves that bucket as the public edge. The current frontend
-workflow does not change the CloudFront distribution or issue a CloudFront
-invalidation. Backend, dashboard, and Helm releases are selected together in
-GitOps desired state; Argo renders the pinned chart and reconciles the resulting
-Kubernetes resources on the ARM64 EC2 control plane. Ansible prepares and
-attaches the on-prem host as an operational concern outside the immutable
-application release path.
+published to S3; the existing CloudFront
+distribution serves that bucket as the public edge (rather than from the Kubernetes cluster). Backend, dashboard, and Helm releases are selected together in a GitOps desired state repository; Argo renders the pinned chart and reconciles the resulting
+Kubernetes resources on the EC2 control plane. Ansible prepares and
+attaches the on-prem host outside the immutable application release path.
 
 ## Repository Responsibilities
 
@@ -221,9 +181,8 @@ them, and Argo reconciles the selection.
 6. Verify API health, static delivery, data access, queue processing, and
    relevant operational metrics.
 
-Production is the reference promotion target. Staging follows the same release
-shape with isolated credentials and data so it can validate the real path
-without becoming a separate architecture.
+Production is the reference promotion target. Staging intentionally follows the same release
+shape, only differing by credentials and environment specific overlays.
 
 ## Rollback And Recovery
 
@@ -241,8 +200,6 @@ reset is explicitly guarded and is never a normal application rollback.
 - Static delivery is separated from Kubernetes so public traffic does not
   compete with API and worker workloads.
 - PostgreSQL storage has a lifecycle separate from application deployment.
-- Redis coordinates runtime behavior but is not the durable product database.
-- Production and staging use the same architecture with isolated environment
+- Production and staging use the same architectures, the same repositories and the same branches (no-drift), with isolated environment
   state.
-- The platform favors immutable releases, explicit recovery, low operating
-  cost, and visible failure boundaries over automatic multi-zone failover.
+- The solution  favors immutable releases to easily identify state and make rollbacks simple
