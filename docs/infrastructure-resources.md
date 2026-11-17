@@ -1,4 +1,4 @@
-# Infrastructure Resource Topology
+# AWS & On-Prem Resources
 
 ## High Level Overview
 
@@ -174,6 +174,18 @@ replacing the EC2 instance.
 | --- | --- | --- |
 | Root volume | EC2 operating system and host data | Encrypted gp3, `minimal` GBs; attached to the control-plane instance |
 | Database volume | PostgreSQL data | Encrypted gp3, `more` GBs in production and `fewer` GBs in staging; `prevent_destroy`, controlled adoption/restore, and one daily DLM snapshot around `03:00` UTC with the seven most recent retained |
+
+## On-Prem Resources
+
+The on-premises resource is a reclaimed Dynabook Portégé X30-F Windows laptop. Windows
+was replaced with Ubuntu Linux. The machine is largely responsible for running workloads that previously were performed in AWS Lambda and EC2.
+
+The host has an 8th-generation Intel Core i5 vPro processor with 4 physical
+cores, 8 logical threads, and 16 GB of RAM (that much RAM on an EC2 instance would be quite expensive).
+
+Ansible prepares the host, installs the required agents and packages, manages
+its SSM and Tailscale integration, and attaches or detaches it from the target
+cluster.
 
 ## Object Storage
 

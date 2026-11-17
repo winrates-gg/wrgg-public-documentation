@@ -16,8 +16,8 @@ Thank you for reading.
 In order of interest.
 | Concern | Answers | Documentation |
 | --- | --- | --- |
-| Infrastructure | What are the AWS, on-premises, and hybrid-network boundaries, and how are they connected? | [Infrastructure](docs/infrastructure.md) |
-| Resources | What individual AWS resources make up the production deployment, and how are their storage, delivery, access, and lifecycle details configured? | [Infrastructure resource topology](docs/infrastructure-resources.md) |
+| Infrastructure | What are the AWS, On-Prem, and hybrid-network boundaries, and how are they connected? | [Infrastructure](docs/infrastructure.md) |
+| AWS & On-Prem Resources | What individual AWS and On-Prem resources make up the production deployment, and how are their storage, delivery, access, and lifecycle details configured? | [AWS & On-Prem Resources](docs/infrastructure-resources.md) |
 | Kubernetes | How are cluster resources composed, scheduled, and reconciled? | [Kubernetes runtime](docs/kubernetes-runtime.md) |
 | Backend | How does the API acquire, protect, process, and serve Riot data? | [Backend runtime](docs/backend-runtime.md) |
 | CI/CD | How does validated source become an immutable production release? | [CI/CD and release](docs/ci-cd.md) |

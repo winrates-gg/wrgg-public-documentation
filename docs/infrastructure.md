@@ -124,4 +124,4 @@ information, and attaches it to the target environment.
 ## Resource Details
 
 The detailed production resource inventory is documented in
-[Infrastructure Resource Topology](infrastructure-resources.md). It covers the Terraform managed, AWS-deployed networking, compute, storage, monitoring and computing solution
+[AWS & On-Prem Resources](infrastructure-resources.md). It covers the Terraform-managed AWS networking, compute, storage, monitoring, and the On-Prem resource.
