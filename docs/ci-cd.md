@@ -101,21 +101,25 @@ that concern.
 
 ```mermaid
 flowchart TB
-    subgraph TerraformLane["TERRAFORM RELEASE"]
+    subgraph ReleaseFlows["RELEASE FLOWS"]
         direction LR
-        TerraformArtifact["Immutable Terraform release"] --> TerraformApply["Environment plan and apply"]
-    end
 
-    subgraph FrontendLane["FRONTEND RELEASE"]
-        direction LR
-        FrontendArtifact["Immutable frontend S3 release"] --> FrontendPublish["Publish to S3"]
-    end
+        subgraph TerraformLane["TERRAFORM RELEASE"]
+            direction LR
+            TerraformArtifact["Immutable Terraform release"] --> TerraformApply["Environment plan and apply"]
+        end
 
-    subgraph RuntimeLane["EC2 / KUBERNETES RELEASE"]
-        direction LR
-        BackendArtifact["Immutable API and worker image"] --> Desired["GitOps environment desired state"]
-        DashboardArtifact["Immutable dashboard image"] --> Desired
-        ChartArtifact["Immutable Helm chart release"] --> Desired
+        subgraph FrontendLane["FRONTEND RELEASE"]
+            direction LR
+            FrontendArtifact["Immutable frontend S3 release"] --> FrontendPublish["Publish to S3"]
+        end
+
+        subgraph RuntimeLane["EC2 / KUBERNETES RELEASE"]
+            direction LR
+            BackendArtifact["Immutable API and worker image"] --> Desired["GitOps environment desired state"]
+            DashboardArtifact["Immutable dashboard image"] --> Desired
+            ChartArtifact["Immutable Helm chart release"] --> Desired
+        end
     end
 
     subgraph AWSInfra["AWS INFRASTRUCTURE"]
@@ -144,6 +148,7 @@ flowchart TB
     class SiteBucket,ControlPlane aws
     class Argo,Runtime delivery
     class Desired neutral
+    style ReleaseFlows fill:none,stroke:none
     style TerraformLane fill:none,stroke:none
     style FrontendLane fill:none,stroke:none
     style RuntimeLane fill:none,stroke:none
