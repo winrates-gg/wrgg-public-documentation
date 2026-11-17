@@ -103,12 +103,12 @@ that concern.
 flowchart TB
     subgraph TerraformLane["TERRAFORM RELEASE"]
         direction LR
-        TerraformArtifact["Immutable Terraform release"] --> TerraformApply["Environment plan and apply"] --> AWSInfra["AWS infrastructure"]
+        TerraformArtifact["Immutable Terraform release"] --> TerraformApply["Environment plan and apply"]
     end
 
     subgraph FrontendLane["FRONTEND RELEASE"]
         direction LR
-        FrontendArtifact["Immutable frontend S3 release"] --> SiteBucket["Public site bucket"]
+        FrontendArtifact["Immutable frontend S3 release"] --> FrontendPublish["Publish to S3"]
     end
 
     subgraph RuntimeLane["EC2 / KUBERNETES RELEASE"]
@@ -116,12 +116,23 @@ flowchart TB
         BackendArtifact["Immutable API and worker image"] --> Desired["GitOps environment desired state"]
         DashboardArtifact["Immutable dashboard image"] --> Desired
         ChartArtifact["Immutable Helm chart release"] --> Desired
-        Desired --> Argo["Argo CD"]
+    end
 
-        subgraph ControlPlane["ARM64 EC2 control plane"]
-            Argo --> Runtime["Kubernetes runtime"]
+    subgraph AWSInfra["AWS INFRASTRUCTURE"]
+        direction TB
+
+        subgraph PublicSite["PUBLIC STATIC SITE"]
+            SiteBucket["Public S3 Bucket"]
+        end
+
+        subgraph ControlPlane["ARM64 EC2 CONTROL PLANE"]
+            Argo["Argo CD"] --> Runtime["Kubernetes Cluster State"]
         end
     end
+
+    TerraformApply --> AWSInfra
+    FrontendPublish --> SiteBucket
+    Desired --> Argo
 
     classDef release fill:#f2f2f2,stroke:#858585,color:#202020
     classDef delivery fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
@@ -130,12 +141,15 @@ flowchart TB
 
     class TerraformArtifact,FrontendArtifact,BackendArtifact,DashboardArtifact,ChartArtifact release
     class TerraformApply delivery
-    class AWSInfra,SiteBucket,ControlPlane aws
+    class SiteBucket,ControlPlane aws
     class Argo,Runtime delivery
     class Desired neutral
     style TerraformLane fill:none,stroke:none
     style FrontendLane fill:none,stroke:none
     style RuntimeLane fill:none,stroke:none
+    style AWSInfra fill:#e5efff,stroke:#4c78b8,color:#162a47
+    style PublicSite fill:#e5efff,stroke:#4c78b8,color:#162a47
+    style ControlPlane fill:#e5efff,stroke:#4c78b8,color:#162a47
 ```
 
 Terraform applies AWS infrastructure directly. The frontend release is
