@@ -658,5 +658,5 @@ operations rather than normal application deployment behavior.
 
 This backend repository is the source of truth for runtime behavior. The
 published backend release is the source of truth for a deployable image. The
-production `k8s-live` revision is the source of truth for which release is
-requested.
+production GitOps desired cluster state revision is the source of truth for
+which release is requested.

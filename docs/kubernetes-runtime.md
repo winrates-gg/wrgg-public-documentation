@@ -14,7 +14,8 @@ The responsibilities are split across multiple concerns:
 - `INTERNAL_REPOSITORY_1` defines Helm charts, defining the Kubernetes resources and their relationships.
 - `INTERNAL_REPOSITORY_2` supplies the desired state and release selections.
 - EC2 user data provides the initial bootstrap gateway: it installs K3s and Argo
-  CD, clones the desired-state repository, and applies the root Argo resources.
+  CD, clones the GitOps desired cluster state repository, and applies the root
+  Argo resources.
 - Argo CD then renders the selected Helm sources and reconciles them into the
   cluster.
 
@@ -51,8 +52,8 @@ and it is not the ongoing deployment engine. EC2 user data does not render the
 full application itself.
 
 Once Argo CD and the root `Application` exist, Argo's repo-server fetches the
-remote desired-state repository itself. The root `Application` loads the
-environment overlay, which creates the `ApplicationSet` resources. Those
+remote GitOps desired cluster state repository itself. The root `Application`
+loads the environment overlay, which creates the `ApplicationSet` resources. Those
 `ApplicationSet` resources generate the bootstrap and runtime Argo
 `Application`s, and Argo renders the pinned Helm charts and applies the
 resulting Kubernetes resources.
@@ -132,7 +133,7 @@ the cluster.
 flowchart TB
     BootstrapGateway[EC2 Control Plane user-data bootstrap]
     Clone[One-time Git clone]
-    Desired[GitHub desired-state repository]
+    Desired[GitOps desired cluster state repository]
     RootApply[kubectl applies Argo CD + root Application]
     Argo[Argo CD reconciliation loop]
 
@@ -220,19 +221,19 @@ the runtime ApplicationSet supplies both the init and runtime chart paths.
 
 **Cluster creation**
 
-- EC2 user data installs K3s, creating the cluster, then
-  clones the desired-state repository and uses `kubectl` to apply the Argo CD
+- EC2 user data installs K3s, creating the cluster, then clones the GitOps
+  desired cluster state repository and uses `kubectl` to apply the Argo CD
   installation and root `Application`.
 
 **Reconciliation**
 
-- Argo CD takes over and continuously compares the
-  remote desired-state repository with the observed cluster, reconciling the
-  difference. It does not write changes back to GitHub.
+- Argo CD takes over and continuously compares the remote GitOps desired cluster
+  state repository with the observed cluster, reconciling the difference. It
+  does not write changes back to GitHub.
 
 **Argo CD ApplicationSets**
 
-The desired-state repository owns two ApplicationSets:
+The GitOps desired cluster state repository owns two ApplicationSets:
 
 - **Bootstrap ApplicationSet:** Generates the Argo application for cluster
   support.
@@ -241,8 +242,8 @@ The desired-state repository owns two ApplicationSets:
 
 **Helm charts**
 
-The Helm chart repository owns three charts. The desired-state repository
-selects their immutable release versions and environment values:
+The Helm chart repository owns three charts. The GitOps desired cluster state
+repository selects their immutable release versions and environment values:
 
 - **Bootstrap chart:** Supports the private Tailscale-connected operator path,
   including private ingress, Argo access, RBAC, CoreDNS customization, and

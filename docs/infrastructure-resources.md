@@ -273,8 +273,8 @@ roots:
 Terraform owns the declared AWS resource state. EC2 user data creates the first
 K3s control-plane path, while Kubernetes and Argo CD later own cluster resource
 reconciliation. Ansible owns the worker host and its environment
-attachment. Application image selection belongs to the Kubernetes desired-state
-repository and release workflows rather than to this infrastructure layer.
+attachment. Application image selection belongs to the GitOps desired cluster
+state repository and release workflows rather than to this infrastructure layer.
 
 ## Design Choices
 

@@ -149,7 +149,7 @@ flowchart LR
 
 Terraform applies AWS infrastructure directly. The frontend release is
 published to S3; the existing CloudFront
-distribution serves that bucket as the public edge (rather than from the Kubernetes cluster). Backend, dashboard, and Helm releases are selected together in a GitOps desired state repository; Argo renders the pinned chart and reconciles the resulting
+distribution serves that bucket as the public edge (rather than from the Kubernetes cluster). Backend, dashboard, and Helm releases are selected together in the GitOps desired cluster state repository; Argo renders the pinned chart and reconciles the resulting
 Kubernetes resources on the EC2 control plane. Ansible prepares and
 attaches the on-prem host outside the immutable application release path.
 
@@ -160,13 +160,13 @@ attaches the on-prem host outside the immutable application release path.
 | Backend repository | API and worker code, tests, backend image releases |
 | Frontend repository | React site, dashboard bundle, static publication |
 | Helm chart repository | Runtime templates and chart releases |
-| GitOps repository | Environment artifact pointers and desired state |
+| GitOps desired cluster state repository | Environment artifact pointers and desired state |
 | Terraform repositories | AWS infrastructure and remote state |
 | Ansible repository | On-prem host preparation and attachment |
 
 The exact repository names, workflow commands, account identifiers, and
 environment hostnames remain private. The public boundary is the important
-part: application repositories publish artifacts, the GitOps repository selects
+part: application repositories publish artifacts, the GitOps desired cluster state repository selects
 them, and Argo reconciles the selection.
 
 ## Normal Promotion
