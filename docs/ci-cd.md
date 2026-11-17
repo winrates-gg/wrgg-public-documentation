@@ -104,6 +104,7 @@ flowchart LR
     TerraformArtifact["Immutable Terraform release"] --> TerraformApply["Environment plan and apply"] --> AWS["AWS infrastructure"]
 
     FrontendArtifact["Immutable frontend S3 release"] --> SiteBucket["Public site bucket"] --> CloudFront["CloudFront"]
+    AWS --> CloudFront
 
     BackendArtifact["Immutable API and worker image"] --> Desired["GitOps environment desired state"]
     DashboardArtifact["Immutable dashboard image"] --> Desired
@@ -112,11 +113,13 @@ flowchart LR
 
     classDef artifact fill:#e5efff,stroke:#4c78b8,color:#162a47
     classDef delivery fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
+    classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
     classDef neutral fill:#f2f2f2,stroke:#858585,color:#202020
 
     class TerraformArtifact,FrontendArtifact,BackendArtifact,DashboardArtifact,ChartArtifact artifact
-    class TerraformApply,SiteBucket,CloudFront,Argo,Runtime delivery
-    class AWS,Desired neutral
+    class TerraformApply,SiteBucket,Argo,Runtime delivery
+    class AWS,CloudFront aws
+    class Desired neutral
 ```
 
 Terraform applies AWS infrastructure directly. The frontend release is
