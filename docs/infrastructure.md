@@ -23,6 +23,14 @@ GitHub OIDC when authorized, and is discarded after the job completes. The
 runner is a release and operations tool rather than a persistent WR.GG runtime
 resource.
 
+### Diagram Legend
+
+| Color | Boundary |
+| --- | --- |
+| Gray | Boundary and operations context |
+| Blue | AWS and cloud resources |
+| Green | Runtime and private-network resources |
+
 ## AWS Organization Chart
 
 ```mermaid

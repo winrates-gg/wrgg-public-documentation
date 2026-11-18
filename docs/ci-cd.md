@@ -18,6 +18,14 @@ roles, rather than through credentials stored on a persistent runner.
 
 Argo CD is the automated reconciliation & continuous deploment mechanism component for the live Kubernetes cluster.
 
+### Diagram Legend
+
+| Color | Boundary |
+| --- | --- |
+| Gray | Source, release, and desired-state identity |
+| Green | Validation and active runtime |
+| Blue | Published artifacts and AWS delivery |
+
 ## Release Model
 
 The system keeps four identities separate:
@@ -74,10 +82,6 @@ flowchart TB
 
 CD selects immutable releases and delivers them through the mechanism owned by
 that concern. This is an explict operator action rather than a fully automated or "touchless" delivery system.
-
-The CD diagram uses the shared architecture palette: gray marks release
-identities and desired state, green marks the active Argo, Kubernetes, and
-on-prem runtime paths, and blue marks AWS-hosted infrastructure.
 
 ```mermaid
 flowchart LR

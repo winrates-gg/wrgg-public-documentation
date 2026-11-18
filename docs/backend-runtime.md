@@ -99,6 +99,8 @@ erDiagram
 - The many analytics tables reuse those dimensions to store product-specific
   observations related to champion performance, itemization outcomes, matchups, synergies,
   scaling, and more. `CHAMPION_ANALYTICS` is an illustrative catch-all term for that family of derived analytics. It is not a literal table.
+- `Data Dragon` is a Riot API that serves assets such as icons, it is separate from the "Riot API" referred to across this document
+- `CommunityDragon` a community/3rd party service on top of Data Dragon that is for all intents and purposes more reliable (but unofficial)
 
 ### Primary API Endpoints
 
@@ -121,14 +123,12 @@ This diagram outlines the major conceptual boundaries with an emphasis on the ma
 
 ### Diagram Legend
 
-The diagrams in this document use the shared architecture palette:
-
-| Color | Meaning |
+| Color | Boundary |
 | --- | --- |
-| Gray | Neutral actors, boundaries, orchestration, and configuration concepts |
-| Green | Highlighted WR.GG application code/workload runtime (AWS or on-prem; see [Infrastructure](infrastructure.md)) |
-| Blue | AWS-hosted infrastructure |
-| Red | External services outside WR.GG's ownership |
+| Gray | User, Kubernetes, and neutral context |
+| Green | WR.GG application runtime |
+| Blue | AWS resources |
+| Red | External services |
 
 ```mermaid
 flowchart LR
@@ -146,7 +146,7 @@ flowchart LR
     Jobs[Scheduled data and maintenance jobs]
     NewDestiny[New Destiny]
     Redis[(Redis coordination state)]
-    Postgres[(PostgreSQL product data)]
+    Postgres[(PostgreSQL product data ON EC2)]
     Archives[(S3 match archives)]
     Assets[(S3 assets and published artifacts)]
     Riot[Riot API]
@@ -191,7 +191,8 @@ flowchart LR
     class Browser user
     class Controllers,Deployments,CronJobs,APIIngress platform
     class API,MatchWorker,LadderWorker,Jobs,NewDestiny backend
-    class CloudFront,APICloudFront,PublicSite,Redis,Postgres,Archives,Assets aws
+    class CloudFront,APICloudFront,PublicSite,Postgres,Archives,Assets aws
+    class Redis backend
     class Riot,CommunityDragon,DataDragon external
 ```
 
@@ -210,7 +211,7 @@ the Riot API is the external service it calls.
 flowchart LR
     FastAPI[FastAPI]
     NewDestiny[New Destiny]
-    Postgres[(PostgreSQL)]
+    Postgres[(PostgreSQL ON EC2)]
     Redis[(Redis)]
     Riot[Riot API]
 
@@ -223,8 +224,8 @@ flowchart LR
     classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
     classDef external fill:#fde5e5,stroke:#c54b4b,color:#4a1717
 
-    class FastAPI,NewDestiny core
-    class Postgres,Redis aws
+    class FastAPI,NewDestiny,Redis core
+    class Postgres aws
     class Riot external
 ```
 
@@ -243,7 +244,7 @@ sequenceDiagram
     participant ND as New Destiny
     participant Redis as Redis
     participant Riot as Riot API
-    participant DB as PostgreSQL
+    participant DB as PostgreSQL ON EC2
     participant Queue as match_build_queue
 
     Note over User,Queue: SYNCHRONOUS USER REQUEST
@@ -392,7 +393,7 @@ flowchart LR
     Jobs[Scheduled data and maintenance jobs]
     NewDestiny[New Destiny]
     Redis[(Redis coordination state)]
-    Postgres[(PostgreSQL product data)]
+    Postgres[(PostgreSQL product data ON EC2)]
     Archives[(S3 match archives)]
     Assets[(S3 assets and published artifacts)]
     Riot[Riot API]
@@ -426,7 +427,8 @@ flowchart LR
 
     class Controllers,Deployments,CronJobs platform
     class MatchWorker,LadderWorker,Jobs,NewDestiny backend
-    class Redis,Postgres,Archives,Assets aws
+    class Postgres,Archives,Assets aws
+    class Redis backend
     class Riot,CommunityDragon,DataDragon external
 ```
 
@@ -450,7 +452,7 @@ sequenceDiagram
     participant ND as New Destiny
     participant Redis as Redis
     participant Riot as Riot API
-    participant DB as PostgreSQL
+    participant DB as PostgreSQL ON EC2
     participant S3 as S3 buckets
 
     Note over Controller,S3: DEPLOYMENT-MANAGED WORKER PROCESSING
@@ -531,7 +533,7 @@ sequenceDiagram
     participant Jobs as Scheduled jobs
     participant CDragon as CommunityDragon
     participant DDragon as Data Dragon
-    participant DB as PostgreSQL
+    participant DB as PostgreSQL ON EC2
     participant S3 as S3 buckets
 
     Note over Controller,S3: CRONJOB-STARTED SCHEDULED PROCESSING
@@ -587,37 +589,25 @@ availability and background throughput are the same workload.
 
 #### Match Queue Worker
 
-The match worker claims queued match ID/platform pairs, performs rate-limit-aware
-outbound Riot requests, writes match archives to S3, persists normalized match and
-player data to PostgreSQL, and records terminal or retryable outcomes. This is the
-path that turns user-initiated or system-generated queue entries into durable match
-history JSON and UI-served data.
-
-Claims are platform-scoped and selected in descending `match_id` order. Concurrent
-workers use row locking, so a locked row may be skipped; this is ordered work, but
-not strict FIFO.
-
-When New Destiny raises a rate-limit exception during match processing, the worker does not release
-the queue row. It records the rate-limit error, changes the row to `retry`,
-retains the current claim, sleeps for `retry_after + 1` seconds, and retries the
-same queue job. A successful completion changes the row to `done` and releases
-the claim. If the worker dies, stale-lease reclamation eventually returns the
-row to `queued` so another worker can claim it.
+- Drains queued match IDs discovered through user activity or background work.
+- Uses New Destiny for Riot requests and writes match archives to S3.
+- Persists normalized match and player data to PostgreSQL for match history and analytics.
+- Handles retryable and terminal processing outcomes without serving HTTP requests.
 
 #### Ladder Worker
 
-The ladder worker refreshes ranked snapshots for all (supported) regions. It fetches
-the relevant ranked pages, resolves the player and mastery data needed for the
-ladder view, updates durable records, and publishes the snapshot consumed by
-the API. Past versions were browser-initiated single page at a time, but this being continually generated, stored, and served on-demand was clearly the superior pattern. The New Destiny retry wrapper sleeps and retries rate-limited requests within its retry budget. If that budget is exhausted, the current all-or-none snapshot attempt stops without publishing a new snapshot.
+- Refreshes ranked ladder snapshots for the supported regions and platforms.
+- Collects the ranked-player and mastery data needed by ladder views.
+- Publishes durable ladder data for the API and frontend to serve.
+- Runs as background ingestion and does not depend on a browser request to complete a refresh.
 
 #### Scheduled Data And Asset Jobs
 
 Recurring jobs keep the rapidly changing game catalog usable:
 
-- patch partitions and reference data;
-- champions, items, runes, spells, game modes, and icons;
-- CommunityDragon-backed asset reconciliation;
+- patch partitions and reference data
+- champions, items, runes, spells, game modes, and icons
+- CommunityDragon-backed asset reconciliation
 - tier-cohort and other derived analytics refreshes.
 
 Initialization and recurring reconciliation use different patch-readiness
@@ -625,13 +615,10 @@ policies so a fresh environment can start before every upstream source is ready.
 
 #### Archive, SEO, And Maintenance Jobs
 
-Archive reconciliation repairs database references against retained S3 match
-objects. Archive cleanup removes expired objects according to the retention
-policy. The SEO publisher reads the database-backed report manifest, renders
-static pages and sitemap content, and publishes them to the public site bucket.
-
-These jobs produce or maintain derived and operational state; they do not
-replace PostgreSQL as the durable application source of truth.
+- Reconcile and clean up retained match archives in S3 and their PostgreSQL references.
+- Publish generated SEO pages and sitemap content to the public site bucket.
+- Run scheduled maintenance that keeps derived data and operational state current.
+- Leave PostgreSQL as the durable application source of truth.
 
 ## Database Lifecycle
 

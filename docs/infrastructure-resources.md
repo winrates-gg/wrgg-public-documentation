@@ -19,10 +19,19 @@ GitHub-hosted Actions runners are ephemeral execution environments rather than
 long-lived allocated infrastructure. Their durable resource boundary is the IAM roles and
 policies that allow approved workflows to publish artifacts or apply changes to AWS.
 
+### Diagram Legend
+
+| Color | Boundary |
+| --- | --- |
+| Gray | Account, operations, and neutral context |
+| Green | WR.GG runtime and private network |
+| Blue | AWS resources |
+| Red | External services |
+
 ## Resource Locations
 
 The account boundaries describe ownership. The resource groups inside each
-environment account describe the major Terraform compositions rather than every
+environment account describe the major Terraform-backed concerns rather than every
 individual AWS resource.
 
 ```mermaid
@@ -43,7 +52,7 @@ flowchart TB
                 ProductionBootstrap["Artifact storage, ECR, and ACM"]
                 ProductionNetwork["VPC, public subnet, routes, and security group"]
                 ProductionCompute["ARM64 EC2 K3s control plane"]
-                ProductionData["PostgreSQL EBS volume and DLM snapshots"]
+                ProductionData["PostgreSQL ON EC2\nEBS volume and DLM snapshots"]
                 ProductionDelivery["CloudFront, Route 53, WAF, and DNS"]
                 ProductionOperations["IAM, SSM, CloudWatch, and SNS"]
             end
@@ -80,17 +89,6 @@ flowchart TB
     class Tailscale runtime
 ```
 
-### Diagram Legend
-
-The diagrams in this document use the shared architecture palette:
-
-| Color | Meaning |
-| --- | --- |
-| Gray | Neutral actors, boundaries, orchestration, and configuration concepts |
-| Green | WR.GG-owned workload runtime and private-network components |
-| Blue | AWS-hosted infrastructure |
-| Red | External services outside WR.GG's ownership |
-
 ## Account And Regional Placement
 
 | Scope | Declared placement | Primary responsibility |
@@ -111,7 +109,7 @@ flowchart LR
     Browser["Browser"]
     DNS["Route 53"]
     WebCDN["Web CloudFront distribution"]
-    APICDN["API CloudFront distribution"]
+    APICDN["API CloudFront distribution\nOrigin: control-plane Elastic IP"]
     ACM["ACM certificate"]
 
     subgraph Origins["S3 origins"]
@@ -121,16 +119,18 @@ flowchart LR
     end
 
     subgraph Region["AWS us-east-2"]
-        IGW["Internet gateway"]
         subgraph VPC["Environment VPC"]
+            IGW["Internet gateway"]
             RouteTable["Public route table"]
             NetworkACL["Default network ACL"]
             SecurityGroup["Control plane security group"]
             subgraph AvailabilityZone["Availability Zone: us-east-2a"]
                 subgraph PublicSubnet["Public subnet: 10.10.1.0/24"]
-                    ControlPlane["ARM64 EC2 control plane\nK3s and ingress"]
+                    subgraph ElasticIPAssociation["Elastic IP association"]
+                        ControlPlane["ARM64 EC2 control plane\nK3s and ingress"]
+                    end
                 end
-                Database["Attached PostgreSQL EBS\nencrypted gp3 volume"]
+                Database["PostgreSQL ON EC2\nattached EBS\nencrypted gp3 volume"]
             end
         end
     end
@@ -138,7 +138,6 @@ flowchart LR
     Redis["Redis deployment\ninside K3s"]
     RemoteHost["Remote on-prem\nLinux worker"]
     Tailscale["WR.GG Tailscale tailnet"]
-    ElasticIP["Elastic IP"]
     Operations["CloudWatch and SNS"]
 
     Browser --> DNS
@@ -149,8 +148,7 @@ flowchart LR
     WebCDN --> Site
     WebCDN --> Icons
     WebCDN --> Archives
-    APICDN --> ElasticIP --> ControlPlane
-    IGW --> RouteTable --> NetworkACL --> SecurityGroup --> ControlPlane
+    APICDN --> IGW --> RouteTable --> NetworkACL --> SecurityGroup --> ControlPlane
     ControlPlane --> Database
     ControlPlane --> Redis
     Tailscale --- ControlPlane
@@ -163,8 +161,9 @@ flowchart LR
     classDef external fill:#fee2e2,stroke:#dc2626,color:#111827
 
     class Browser neutral
-    class DNS,WebCDN,APICDN,ACM,Site,Icons,Archives,IGW,RouteTable,NetworkACL,SecurityGroup,ControlPlane,Database,ElasticIP,Operations aws
+    class DNS,WebCDN,APICDN,ACM,Site,Icons,Archives,IGW,RouteTable,NetworkACL,SecurityGroup,ControlPlane,Database,Operations aws
     class Redis,RemoteHost,Tailscale runtime
+    style ElasticIPAssociation fill:#e5efff,stroke:#4c78b8,color:#162a47
 ```
 
 | Resource | Production shape | Role |
@@ -195,10 +194,7 @@ replacing the EC2 instance.
 ## On-Prem Resources
 
 The on-premises resource is a reclaimed Dynabook Portégé X30-F Windows laptop. Windows
-was replaced with Ubuntu Linux. The machine is largely responsible for running workloads that previously were performed in AWS Lambda and EC2.
-
-The host has an 8th-generation Intel Core i5 vPro processor with 4 physical
-cores, 8 logical threads, and 16 GB of RAM (that much RAM on an EC2 instance would be quite expensive).
+was replaced with Ubuntu Linux. The machine is largely responsible for running workloads that previously were performed in AWS Lambda and EC2. This decision turned unused hardware, with a notable 16 GB of RAM, into useful cluster capacity.
 
 Ansible prepares the host, installs the required agents and packages, manages
 its SSM and Tailscale integration, and attaches or detaches it from the target
@@ -206,10 +202,8 @@ cluster.
 
 ## Object Storage
 
-The bootstrap artifact-storage module creates private S3 buckets with
-server-side encryption and public-access blocking. CloudFront reads the public
-web origins through Origin Access Control rather than exposing the buckets
-directly.
+Terraform creates private S3 buckets with
+server-side encryption enabled. These are bootstrapped and exists outside of the regular live-Terraform path because it allows CI/CD to function without tying them to the lifecycle of core infrastructure. Origin Access Controls make CloudFront the primary reader rather than direct bucket aceess.
 
 | S3 store or object group | Contents | Important notes |
 | --- | --- | --- |
@@ -231,8 +225,8 @@ artifacts:
 | Backend worker | Match, ladder, maintenance, and other background worker runtime | Scans images on push; release tags are retained for promotion and rollback |
 | Dashboard | Private dashboard web server image | Scans images on push; release tags are retained for dashboard deployment and rollback |
 
-Untagged images expire after approximately one day, while each repository keeps
-the most recent 20 release-tagged images. The production bootstrap also grants
+Untagged images expire 24 hours, while each repository keeps
+the most recent 20 release-tagged images. The IAM solution also grants
 narrowly scoped promotion reads for release workflows that need to promote or
 inspect artifacts.
 

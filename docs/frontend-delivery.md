@@ -37,14 +37,11 @@ lifecycle while the FastAPI API owns validation, freshness, and durable data.
 
 ### Diagram Legend
 
-The diagrams in this document use the shared architecture palette:
-
-| Color | Meaning |
+| Color | Boundary |
 | --- | --- |
-| Gray | Neutral actors, boundaries, orchestration, and configuration concepts |
-| Green | Highlighted WR.GG application code/workload runtime (AWS or on-prem; see [Infrastructure](infrastructure.md)) |
-| Blue | AWS-hosted infrastructure |
-| Red | External services outside WR.GG's ownership |
+| Gray | Browser and neutral context |
+| Green | WR.GG application and delivery flow |
+| Blue | AWS resources and delivery surfaces |
 
 ```mermaid
 flowchart LR
@@ -161,7 +158,7 @@ flowchart LR
     Nginx[Nginx dashboard service]
     API[Dashboard API deployment]
     Redis[(Redis metrics)]
-    DB[(PostgreSQL queue state)]
+    DB[(PostgreSQL queue state ON EC2)]
     Operator[Private operator browser]
 
     Source --> Image
@@ -175,8 +172,8 @@ flowchart LR
     classDef backend fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
     classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
     class Operator,Nginx user
-    class Source,Image,API backend
-    class Redis,DB aws
+    class Source,Image,API,Redis backend
+    class DB aws
 ```
 
 The dashboard image contains only the static dashboard bundle. It is selected

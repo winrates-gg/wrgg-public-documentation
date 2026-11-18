@@ -35,16 +35,14 @@ the API, Redis, workers, dashboard, and scheduled jobs.
 
 ### Diagram Legend
 
-The diagrams in this document use the shared architecture palette:
-
-| Color | Meaning |
+| Color | Boundary |
 | --- | --- |
-| Gray | Neutral actors, boundaries, orchestration, and configuration concepts |
-| Green | Highlighted WR.GG application code/workload runtime (AWS or on-prem; see [Infrastructure](infrastructure.md)) |
-| Blue | AWS-hosted infrastructure |
-| Red | External services outside WR.GG's ownership |
+| Gray | Operator and neutral context |
+| Green | Kubernetes workload/runtime |
+| Blue | AWS resources |
+| Red | External services |
 
-## Bootstrap Gateway And Reconciliation
+## Bootstrapping & Ongoing Reconciliation
 
 The cluster has a one-time bootstrap path and a separate steady-state
 reconciliation path. They are related, but they are not the same mechanism.
@@ -96,7 +94,7 @@ flowchart LR
     DashboardAPI[Dashboard API Deployment]
 
     Redis[(Redis Deployment)]
-    PostgreSQL[(PostgreSQL)]
+    PostgreSQL[(PostgreSQL ON EC2)]
     Riot[Riot API]
 
     Public --> PublicIngress --> BackendService --> API
@@ -116,7 +114,8 @@ flowchart LR
     classDef external fill:#fde5e5,stroke:#c54b4b,color:#4a1717
 
     class Public,Operator neutral
-    class PublicIngress,BackendService,API,PrivateIngress,DashboardService,DashboardAPIService,Dashboard,DashboardAPI,Redis app
+    class PublicIngress,BackendService,API,PrivateIngress,DashboardService,DashboardAPIService,Dashboard,DashboardAPI app
+    class Redis app
     class PostgreSQL aws
     class Riot external
 ```
@@ -304,11 +303,11 @@ The helm chart repository spans 3 concerns:
 The bootstrap chart installs resources that support the cluster and private
 operator path:
 
-- private Traefik ingress controller;
-- private `IngressClass` and Argo ingress;
-- ServiceAccount, ClusterRole, and ClusterRoleBinding for ingress discovery;
-- CoreDNS customization for the private network; and
-- cluster admission policies for AWS credential mounts.
+- Private Traefik ingress controller
+- Private `IngressClass` and Argo ingress
+- ServiceAccount, ClusterRole, and ClusterRoleBinding for ingress discovery
+- CoreDNS customization for the private network
+- Cluster admission policies for AWS credential mounts
 
 The bootstrap ApplicationSet is reconciled before the environment application.
 It is cluster support, not an application release.
@@ -318,10 +317,10 @@ It is cluster support, not an application release.
 The initialization chart renders finite Jobs using the exact backend release
 selected by `INTERNAL_REPOSITORY_1`:
 
-- database migration;
-- database seed;
-- partition and reference-data initialization; and
-- initial icon refreshes.
+- Database migration
+- Database seed
+- Partition and reference-data fetch & prep
+- Dynamic icon refreshes
 
 These Jobs are intentionally separate from the long-running runtime. A failed
 initialization Job is a failed prerequisite to investigate, not a reason to
