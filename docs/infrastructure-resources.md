@@ -28,7 +28,7 @@ policies that allow approved workflows to publish artifacts or apply changes to 
 | Blue | AWS resources |
 | Red | External services |
 
-## Resource Locations
+## Resource Overview
 
 The account boundaries describe ownership. The resource groups inside each
 environment account describe the major Terraform-backed concerns rather than every
