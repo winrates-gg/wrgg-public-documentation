@@ -12,6 +12,18 @@ The `frontend` spans two primary delivery products:
 This prevents private operational applications from becoming part of the public
 website delivery surface.
 
+## Primary Technology
+
+The public `frontend` is a client-rendered React application built into static
+JavaScript, CSS, and HTML assets. S3 stores the public site artifacts and
+CloudFront provides the public edge. React Router selects the interactive route
+and the browser calls the FastAPI API for product data.
+
+The private dashboard is built from the same frontend source, packaged as a
+small Nginx image, and served by Kubernetes through the private ingress path.
+Generated SEO HTML and sitemap objects use the public S3 delivery path while
+the normal browser experience remains the React application.
+
 ## Frontend Architecture
 
 The WR.GG UI is a client-rendered React single-page application. The

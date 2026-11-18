@@ -7,6 +7,21 @@ delivers each concern through its appropriate promotion path: Terraform applies
 AWS infrastructure, the frontend is published directly to S3 (object storage), and the backend,
 dashboard, and Helm releases are integrated with the Kubernetes cluster by uploading them to ECR (image repository) and mutating Argo CD's desired state pointers.
 
+## Primary Technology
+
+GitHub Actions is the CI/CD execution system. GitHub-hosted runners provide a
+fresh, ephemeral machine for each workflow job; they build and validate source,
+publish frontend and container artifacts, run approved Terraform operations,
+and update the GitOps desired cluster state repository. AWS access is granted
+through short-lived GitHub OIDC credentials and environment-specific IAM
+roles, rather than through credentials stored on a persistent runner.
+
+Argo CD is the in-cluster delivery component for Kubernetes releases. A GitHub
+workflow publishes artifacts or changes the selected desired state, and Argo
+then reconciles the pinned releases into the cluster. The runner's lifetime is
+the workflow job; the published artifacts, desired state, and observed cluster
+state carry the release forward.
+
 ## Release Model
 
 The system keeps four identities separate:

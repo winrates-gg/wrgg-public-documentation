@@ -8,6 +8,21 @@ solution architecture and partly to save on infrastructure costs. Terraform
 lifecycle and its integration with either the production or staging
 environment.
 
+## Primary Technology
+
+AWS is the cloud foundation, with Terraform declaring the account, network,
+compute, storage, delivery, and access resources. The production control plane
+is an ARM64 EC2 host running K3s; S3, ECR, CloudFront, Route 53, ACM, IAM,
+Systems Manager, CloudWatch, and SNS provide the surrounding AWS services.
+Ansible manages the reclaimed on-premises Linux worker, and Tailscale provides
+the private network used to attach it to the selected cluster environment.
+
+GitHub-hosted Actions runners provide the CI/CD execution surface. Each job
+runs on a fresh, ephemeral machine, assumes short-lived AWS credentials through
+GitHub OIDC when authorized, and is discarded after the job completes. The
+runner is a release and operations tool rather than a persistent WR.GG runtime
+resource.
+
 ## AWS Organization Chart
 
 ```mermaid

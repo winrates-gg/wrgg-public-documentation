@@ -7,6 +7,19 @@ level. It complements the higher-level [Infrastructure](infrastructure.md)
 overview by showing the AWS accounts, regional resources, network shape,
 storage, delivery surfaces, and operational services that support WR.GG.
 
+## Primary Technology
+
+The resource layer is primarily Terraform-managed AWS infrastructure: separate
+environment accounts contain the VPC, ARM64 EC2 control plane, EBS database
+storage, S3 buckets, ECR repositories, CloudFront distributions, DNS,
+certificates, and operational services. Ansible manages the on-premises Linux
+worker and its environment attachment through Systems Manager and Tailscale.
+
+GitHub-hosted Actions runners are ephemeral execution environments rather than
+long-lived infrastructure. Their durable resource boundary is the IAM roles and
+policies that allow approved workflows to publish artifacts or apply AWS
+changes.
+
 ## Resource Containment
 
 The account boundaries describe ownership. The resource groups inside each

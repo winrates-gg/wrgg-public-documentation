@@ -23,6 +23,16 @@ This document explains the primary cluster resource model and runtime behavior. 
 `backend` document explains application request and data flows; the CI/CD
 document explains how artifacts and desired state are published.
 
+## Primary Technology
+
+WR.GG runs on K3s, a lightweight Kubernetes distribution, across the ARM64 AWS
+control plane and the attached on-premises Linux worker. Helm packages the
+bootstrap, initialization, and runtime resource compositions. Argo CD reads the
+GitOps desired cluster state repository, renders the selected Helm releases,
+and reconciles them into the cluster. K3s ingress, Kubernetes Deployments,
+CronJobs, Services, ConfigMaps, and Secrets provide the runtime structure for
+the API, Redis, workers, dashboard, and scheduled jobs.
+
 ### Diagram Legend
 
 The diagrams in this document use the shared architecture palette:
