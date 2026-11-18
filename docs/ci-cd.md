@@ -18,14 +18,6 @@ roles, rather than through credentials stored on a persistent runner.
 
 Argo CD is the automated reconciliation & continuous deploment mechanism component for the live Kubernetes cluster.
 
-### Diagram Legend
-
-| Color | Boundary |
-| --- | --- |
-| Gray | Source, release, and desired-state identity |
-| Green | Validation and active runtime |
-| Blue | Published artifacts and AWS delivery |
-
 ## Release Model
 
 The system keeps four identities separate:
@@ -44,6 +36,14 @@ Building an artifact does not necessarily deploy it. For example new `backend` A
 CI is primarily responsible for validating source code in the various repositories that own a
 concern. At operator-specified times, CI publishes an immutable release, marking code
 deployable.
+
+### Diagram Legend
+
+| Color | Boundary |
+| --- | --- |
+| Gray | Source, release, and desired-state identity |
+| Green | Validation and active runtime |
+| Blue | Published artifacts and AWS delivery |
 
 ```mermaid
 flowchart TB

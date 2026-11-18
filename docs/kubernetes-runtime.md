@@ -33,15 +33,6 @@ and reconciles them into the cluster. K3s ingress, Kubernetes Deployments,
 CronJobs, Services, ConfigMaps, and Secrets provide the runtime structure for
 the API, Redis, workers, dashboard, and scheduled jobs.
 
-### Diagram Legend
-
-| Color | Boundary |
-| --- | --- |
-| Gray | Operator and neutral context |
-| Green | Kubernetes workload/runtime |
-| Blue | AWS resources |
-| Red | External services |
-
 ## Bootstrapping & Ongoing Reconciliation
 
 The cluster has a one-time bootstrap path and a separate steady-state
@@ -78,6 +69,15 @@ This first diagram is a highlevel networking overview. It shows how public API t
 private operator traffic enter the cluster, the primary Services receive that
 traffic, and which runtime dependencies those workloads use. It is not a
 complete inventory of Kubernetes resources. See next diagram.
+
+### Diagram Legend
+
+| Color | Boundary |
+| --- | --- |
+| Gray | Operator and neutral context |
+| Green | Kubernetes workload/runtime |
+| Blue | AWS resources |
+| Red | External services |
 
 ```mermaid
 flowchart LR

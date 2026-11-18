@@ -19,6 +19,12 @@ GitHub-hosted Actions runners are ephemeral execution environments rather than
 long-lived allocated infrastructure. Their durable resource boundary is the IAM roles and
 policies that allow approved workflows to publish artifacts or apply changes to AWS.
 
+## Resource Overview
+
+The account boundaries describe ownership. The resource groups inside each
+environment account describe the major Terraform-backed concerns rather than every
+individual AWS resource.
+
 ### Diagram Legend
 
 | Color | Boundary |
@@ -27,12 +33,6 @@ policies that allow approved workflows to publish artifacts or apply changes to 
 | Green | WR.GG runtime and private network |
 | Blue | AWS resources |
 | Red | External services |
-
-## Resource Overview
-
-The account boundaries describe ownership. The resource groups inside each
-environment account describe the major Terraform-backed concerns rather than every
-individual AWS resource.
 
 ```mermaid
 flowchart TB
