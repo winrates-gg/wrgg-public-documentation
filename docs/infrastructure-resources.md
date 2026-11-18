@@ -149,9 +149,8 @@ flowchart LR
     WebCDN --> Site
     WebCDN --> Icons
     WebCDN --> Archives
-    APICDN --> ControlPlane
+    APICDN --> ElasticIP --> ControlPlane
     IGW --> RouteTable --> NetworkACL --> SecurityGroup --> ControlPlane
-    ElasticIP -.-> ControlPlane
     ControlPlane --> Database
     ControlPlane --> Redis
     Tailscale --- ControlPlane
