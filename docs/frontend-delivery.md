@@ -16,13 +16,10 @@ website delivery surface.
 
 The public `frontend` is a client-rendered React application built into static
 JavaScript, CSS, and HTML assets. S3 stores the public site artifacts and
-CloudFront provides the public edge. React Router selects the interactive route
-and the browser calls the FastAPI API for product data.
+CloudFront acts as the public edge. React Router is the client-side routing/navigation layer and the browser calls the FastAPI API for product data.
 
-The private dashboard is built from the same frontend source, packaged as a
-small Nginx image, and served by Kubernetes through the private ingress path.
-Generated SEO HTML and sitemap objects use the public S3 delivery path while
-the normal browser experience remains the React application.
+A private dashboard is built from the same frontend source, packaged as a
+small Nginx image, and served by Kubernetes through a private ingress path.
 
 ## Frontend Architecture
 

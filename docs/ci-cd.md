@@ -10,17 +10,13 @@ dashboard, and Helm releases are integrated with the Kubernetes cluster by uploa
 ## Primary Technology
 
 GitHub Actions is the CI/CD execution system. GitHub-hosted runners provide a
-fresh, ephemeral machine for each workflow job; they build and validate source,
+fresh, ephemeral machine for each workflow job; they build, validate, test source,
 publish frontend and container artifacts, run approved Terraform operations,
 and update the GitOps desired cluster state repository. AWS access is granted
 through short-lived GitHub OIDC credentials and environment-specific IAM
 roles, rather than through credentials stored on a persistent runner.
 
-Argo CD is the in-cluster delivery component for Kubernetes releases. A GitHub
-workflow publishes artifacts or changes the selected desired state, and Argo
-then reconciles the pinned releases into the cluster. The runner's lifetime is
-the workflow job; the published artifacts, desired state, and observed cluster
-state carry the release forward.
+Argo CD is the automated reconciliation & continuous deploment mechanism component for the live Kubernetes cluster.
 
 ## Release Model
 

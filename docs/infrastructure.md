@@ -10,12 +10,12 @@ environment.
 
 ## Primary Technology
 
-AWS is the cloud foundation, with Terraform declaring the account, network,
+AWS is the selected cloud provider, Terraform (IaC) declares the account, network,
 compute, storage, delivery, and access resources. The production control plane
-is an ARM64 EC2 host running K3s; S3, ECR, CloudFront, Route 53, ACM, IAM,
-Systems Manager, CloudWatch, and SNS provide the surrounding AWS services.
-Ansible manages the reclaimed on-premises Linux worker, and Tailscale provides
-the private network used to attach it to the selected cluster environment.
+is an ARM64 EC2 host running K3s. S3, ECR, CloudFront, Route 53, ACM, IAM,
+Systems Manager, CloudWatch, and SNS are the primary surrounding AWS services.
+Ansible manages a an on-premises Linux DC, and Tailscale provides
+the private network used to attach the DC to a selected cluster environment.
 
 GitHub-hosted Actions runners provide the CI/CD execution surface. Each job
 runs on a fresh, ephemeral machine, assumes short-lived AWS credentials through

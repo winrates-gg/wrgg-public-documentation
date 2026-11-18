@@ -9,18 +9,17 @@ storage, delivery surfaces, and operational services that support WR.GG.
 
 ## Primary Technology
 
-The resource layer is primarily Terraform-managed AWS infrastructure: separate
-environment accounts contain the VPC, ARM64 EC2 control plane, EBS database
+WR.GG resources are primarily Terraform-managed AWS infrastructure: separate
+environment accounts contain a VPC, an ARM64 EC2 control plane, EBS database
 storage, S3 buckets, ECR repositories, CloudFront distributions, DNS,
 certificates, and operational services. Ansible manages the on-premises Linux
-worker and its environment attachment through Systems Manager and Tailscale.
+DC and its environment attachment through AWS Systems Manager and a private WR.GG Tailscale network.
 
 GitHub-hosted Actions runners are ephemeral execution environments rather than
-long-lived infrastructure. Their durable resource boundary is the IAM roles and
-policies that allow approved workflows to publish artifacts or apply AWS
-changes.
+long-lived allocated infrastructure. Their durable resource boundary is the IAM roles and
+policies that allow approved workflows to publish artifacts or apply changes to AWS.
 
-## Resource Containment
+## Resource Locations
 
 The account boundaries describe ownership. The resource groups inside each
 environment account describe the major Terraform compositions rather than every
@@ -28,7 +27,7 @@ individual AWS resource.
 
 ```mermaid
 flowchart TB
-    subgraph AWS["AWS / Cloud"]
+    subgraph AWS["AWS Cloud"]
         direction TB
         subgraph Organization["WR.GG AWS Organization"]
             direction TB
@@ -56,14 +55,15 @@ flowchart TB
         end
     end
 
+    Tailscale["WR.GG Tailscale tailnet"]
+
     subgraph OnPrem["On-premises data center"]
         direction LR
         Ansible["Ansible attachment path"]
-        RemoteHost["Remote Linux worker"]
+        RemoteHost["Remote Linux worker (Cluster Capacity)"]
         Ansible --> RemoteHost
     end
 
-    Tailscale["WR.GG Tailscale tailnet"]
     ProductionOperations -.-> Ansible
     Tailscale --- ProductionCompute
     Tailscale --- RemoteHost
@@ -124,8 +124,12 @@ flowchart LR
         IGW["Internet gateway"]
         subgraph VPC["Environment VPC"]
             RouteTable["Public route table"]
-            subgraph PublicSubnet["Public subnet: us-east-2a"]
-                ControlPlane["ARM64 EC2 control plane\nK3s and ingress"]
+            NetworkACL["Default network ACL"]
+            SecurityGroup["Control plane security group"]
+            subgraph AvailabilityZone["Availability Zone: us-east-2a"]
+                subgraph PublicSubnet["Public subnet: 10.10.1.0/24"]
+                    ControlPlane["ARM64 EC2 control plane\nK3s and ingress"]
+                end
                 Database["Attached PostgreSQL EBS\nencrypted gp3 volume"]
             end
         end
@@ -134,6 +138,7 @@ flowchart LR
     Redis["Redis deployment\ninside K3s"]
     RemoteHost["Remote on-prem\nLinux worker"]
     Tailscale["WR.GG Tailscale tailnet"]
+    ElasticIP["Elastic IP"]
     Operations["CloudWatch and SNS"]
 
     Browser --> DNS
@@ -145,8 +150,8 @@ flowchart LR
     WebCDN --> Icons
     WebCDN --> Archives
     APICDN --> ControlPlane
-    IGW --> RouteTable
-    RouteTable --> ControlPlane
+    IGW --> RouteTable --> NetworkACL --> SecurityGroup --> ControlPlane
+    ElasticIP -.-> ControlPlane
     ControlPlane --> Database
     ControlPlane --> Redis
     Tailscale --- ControlPlane
@@ -159,7 +164,7 @@ flowchart LR
     classDef external fill:#fee2e2,stroke:#dc2626,color:#111827
 
     class Browser neutral
-    class DNS,WebCDN,APICDN,ACM,Site,Icons,Archives,IGW,RouteTable,ControlPlane,Database,Operations aws
+    class DNS,WebCDN,APICDN,ACM,Site,Icons,Archives,IGW,RouteTable,NetworkACL,SecurityGroup,ControlPlane,Database,ElasticIP,Operations aws
     class Redis,RemoteHost,Tailscale runtime
 ```
 
