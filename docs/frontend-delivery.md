@@ -54,10 +54,20 @@ flowchart LR
     Rankings[Tier list, mastery, and ladder routes]
     Static[FAQ, contact, and error routes]
     API[FastAPI API]
+    SiteCDN[CloudFront site distribution]
+    IconsCDN[CloudFront icon/layout distribution]
+    ArchivesCDN[CloudFront match archive distribution]
     Archives[S3 match archives]
-    Content[S3 assets and generated content]
+    Icons[S3 icons and layouts]
+    Site[S3 site artifacts and SEO content]
 
     Browser --> Shell
+    Browser --> SiteCDN
+    SiteCDN --> Site
+    Browser --> IconsCDN
+    IconsCDN --> Icons
+    Browser --> ArchivesCDN
+    ArchivesCDN --> Archives
     Shell --> Capabilities
     Shell --> Search
     Shell --> Profiles
@@ -67,20 +77,20 @@ flowchart LR
     Capabilities --> API
     Search --> API
     Profiles --> API
-    Profiles --> Archives
+    Profiles --> ArchivesCDN
     Analytics --> API
     Rankings --> API
-    Search --> Content
-    Profiles --> Content
-    Analytics --> Content
-    Rankings --> Content
+    Search --> IconsCDN
+    Profiles --> IconsCDN
+    Analytics --> IconsCDN
+    Rankings --> IconsCDN
 
     classDef user fill:#f2f2f2,stroke:#858585,color:#202020
     classDef backend fill:#dff1e5,stroke:#3b8f5a,color:#1d3b26
     classDef aws fill:#e5efff,stroke:#4c78b8,color:#162a47
     class Browser user
     class Shell,Capabilities,Search,Profiles,Analytics,Rankings,Static,API backend
-    class Archives,Content aws
+    class SiteCDN,IconsCDN,ArchivesCDN,Archives,Icons,Site aws
 ```
 
 | Route family | Primary routes | Primary API or content boundary |
@@ -107,7 +117,7 @@ flowchart LR
     Commit[Validated frontend commit]
     Release[Immutable frontend release]
     S3[S3 public site bucket]
-    CDN[CloudFront distribution]
+    CDN[CloudFront site distribution]
     Browser[Browser]
     SEO[Kubernetes SEO publication CronJob]
 

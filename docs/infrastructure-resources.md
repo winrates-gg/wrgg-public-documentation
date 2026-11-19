@@ -209,9 +209,9 @@ server-side encryption enabled. These are bootstrapped and exists outside of the
 | --- | --- | --- |
 | Site artifacts | React bundles, static pages, SEO HTML, `sitemap.xml`, and `ads.txt` | Versioned CloudFront web origin; release objects expire after approximately 30 days |
 | Dashboard artifacts | Private dashboard release bundles and related artifacts | Versioned and retained through the dashboard release lifecycle; not a public site origin |
-| Icons and layouts | Champion, item, spell, profile, and layout assets | Non-versioned CloudFront origin under `/icons/*` and `/layouts/*` |
+| Icons and layouts | Champion, item, spell, profile, and layout assets | Non-versioned `icons.*` CloudFront distribution; its flat-rate plan is Pro |
 | Job workspace | Temporary S3 staging objects, SEO artifacts, and S3 Inventory reports | Private and non-versioned; `temporary/` expires after 7 days, inventory reports after 30 days, and other prefixes are managed separately |
-| Match archives | Compressed match JSON served to the frontend | Non-versioned; application retention is based on match age, with a 120-day upload-age safety net and weekly inventory |
+| Match archives | Compressed match JSON served to the frontend | Non-versioned `matches.*` CloudFront distribution; application retention is based on match age, with a 120-day upload-age safety net and weekly inventory |
 | EC2 bootstrap | Versioned user-data/bootstrap script | Private object read by the control-plane instance profile |
 
 ## ECR
@@ -232,11 +232,14 @@ inspect artifacts.
 
 ## Public Delivery And DNS
 
-The delivery layer has separate web and API CloudFront distributions:
+The delivery layer has separate site, icon/layout, match-archive, and API
+CloudFront distributions:
 
 | Surface | Origin | Important behavior |
 | --- | --- | --- |
-| Web distribution | Site, icon/layout, and match-archive S3 origins | HTTPS redirect, optimized static caching for assets, CORS for asset/archive paths, and a CloudFront function for SPA and generated SEO routing |
+| Site distribution | React bundle, generated SEO pages, and maintenance content | HTTPS redirect, SPA and generated SEO routing, and optimized caching for hashed assets |
+| Icon/layout distribution | Icons and layout JSON from the icon S3 bucket | HTTPS redirect, optimized static caching, CORS, and the Pro flat-rate plan |
+| Match-archive distribution | Compressed match JSON from the archive S3 bucket | HTTPS redirect, optimized static caching, CORS, and independent request accounting |
 | API distribution | EC2 control-plane origin | Caching disabled by default; selected analytics and leaderboard paths use origin cache-control behavior; maintenance mode can return a small 503 response at the edge |
 
 AWS Certificate Manager issues the environment certificate and wildcard in
@@ -278,7 +281,7 @@ roots:
 | Bootstrap roots | Establish account-level encryption defaults, artifact buckets, ECR repositories, GitHub Actions publishing roles, certificates, DNS zones, state access, and billing controls |
 | `00-db-storage` live root | Create or adopt the PostgreSQL EBS volume and its snapshot lifecycle |
 | `01-core` live root | Compose the VPC, control plane, API delivery, and API DNS records |
-| `02-web-distribution` live root | Compose the web CloudFront distribution, S3 origin policies, and web DNS records |
+| `02-web-distribution` live root | Compose the site, icon/layout, and match-archive CloudFront distributions, S3 origin policies, and DNS records |
 | Versioned Terraform modules | Provide the reusable network, control-plane, storage, delivery, DNS, certificate, registry, and publishing-role primitives |
 
 Terraform owns the declared AWS resource state. EC2 user data creates the first
