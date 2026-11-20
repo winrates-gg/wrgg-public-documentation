@@ -106,7 +106,7 @@ AWS control plane and the on-premises worker.
 ```mermaid
 flowchart LR
     Internet["Public internet"]
-    PublicEdge["Public web and API edge"]
+    PublicEdge["WAF + CloudFront distributions\nPublic web and API edge"]
     ControlPlane["ARM64 EC2 K3s control plane"]
     SSM["AWS Systems Manager\nhybrid activation"]
     Ansible["Ansible attachment path"]

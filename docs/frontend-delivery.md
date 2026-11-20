@@ -54,9 +54,9 @@ flowchart LR
     Rankings[Tier list, mastery, and ladder routes]
     Static[FAQ, contact, and error routes]
     API[FastAPI API]
-    SiteCDN[CloudFront site distribution]
-    IconsCDN[CloudFront icon/layout distribution]
-    ArchivesCDN[CloudFront match archive distribution]
+    SiteCDN["WAF + CloudFront\nsite distribution"]
+    IconsCDN["WAF + CloudFront\nicon/layout distribution"]
+    ArchivesCDN["WAF + CloudFront\nmatch archive distribution"]
     Archives[S3 match archives]
     Icons[S3 icons and layouts]
     Site[S3 site artifacts and SEO content]
@@ -93,6 +93,10 @@ flowchart LR
     class SiteCDN,IconsCDN,ArchivesCDN,Archives,Icons,Site aws
 ```
 
+Each public CloudFront distribution has its own attached CloudFront-scope AWS
+WAF web ACL. WAF evaluates requests at the edge before CloudFront serves the
+cached response or reaches the S3 origin.
+
 | Route family | Primary routes | Primary API or content boundary |
 | --- | --- | --- |
 | Application and search | `/`, `/search/:displayRegion` | `/capabilities/`, `/summoner-search/`, `/champion-search/`, `/leaderboards/champion-players/` |
@@ -117,7 +121,7 @@ flowchart LR
     Commit[Validated frontend commit]
     Release[Immutable frontend release]
     S3[S3 public site bucket]
-    CDN[CloudFront site distribution]
+    CDN["WAF + CloudFront\nsite distribution"]
     Browser[Browser]
     SEO[Kubernetes SEO publication CronJob]
 

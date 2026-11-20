@@ -133,8 +133,8 @@ This diagram outlines the major conceptual boundaries with an emphasis on the ma
 ```mermaid
 flowchart LR
     Browser[Browser / UI User]
-    CloudFront[CloudFront CDN]
-    APICloudFront[CloudFront API CDN]
+    CloudFront["WAF + CloudFront\npublic site CDN"]
+    APICloudFront["WAF + CloudFront\nAPI CDN"]
     PublicSite[(S3 React Build)]
     APIIngress[K3S Cluster Ingress]
     API[FastAPI API]
@@ -195,6 +195,10 @@ flowchart LR
     class Redis backend
     class Riot,CommunityDragon,DataDragon external
 ```
+
+The public site and API CloudFront distributions each have an attached
+CloudFront-scope AWS WAF web ACL. The WAF evaluates edge requests before the
+distribution serves cached content or forwards a request to its origin.
 
 ## Core API Functionality
 

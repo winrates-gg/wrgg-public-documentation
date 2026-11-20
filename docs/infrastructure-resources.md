@@ -108,8 +108,10 @@ cost rather than a multi-AZ high availability deployment. For this same reason a
 flowchart LR
     Browser["Browser"]
     DNS["Route 53"]
-    WebCDN["Web CloudFront distribution"]
-    APICDN["API CloudFront distribution\nOrigin: control-plane Elastic IP"]
+    WebCDN["WAF + CloudFront\nweb distribution"]
+    IconsCDN["WAF + CloudFront\nicon/layout distribution"]
+    ArchivesCDN["WAF + CloudFront\nmatch-archive distribution"]
+    APICDN["WAF + CloudFront\nAPI distribution\nOrigin: control-plane Elastic IP"]
     ACM["ACM certificate"]
 
     subgraph Origins["S3 origins"]
@@ -142,12 +144,16 @@ flowchart LR
 
     Browser --> DNS
     DNS --> WebCDN
+    DNS --> IconsCDN
+    DNS --> ArchivesCDN
     DNS --> APICDN
     ACM -.-> WebCDN
+    ACM -.-> IconsCDN
+    ACM -.-> ArchivesCDN
     ACM -.-> APICDN
     WebCDN --> Site
-    WebCDN --> Icons
-    WebCDN --> Archives
+    IconsCDN --> Icons
+    ArchivesCDN --> Archives
     APICDN --> IGW --> RouteTable --> NetworkACL --> SecurityGroup --> ControlPlane
     ControlPlane --> Database
     ControlPlane --> Redis
@@ -161,7 +167,7 @@ flowchart LR
     classDef external fill:#fee2e2,stroke:#dc2626,color:#111827
 
     class Browser neutral
-    class DNS,WebCDN,APICDN,ACM,Site,Icons,Archives,IGW,RouteTable,NetworkACL,SecurityGroup,ControlPlane,Database,Operations aws
+    class DNS,WebCDN,IconsCDN,ArchivesCDN,APICDN,ACM,Site,Icons,Archives,IGW,RouteTable,NetworkACL,SecurityGroup,ControlPlane,Database,Operations aws
     class Redis,RemoteHost,Tailscale runtime
     style ElasticIPAssociation fill:#e5efff,stroke:#4c78b8,color:#162a47
 ```
@@ -248,7 +254,8 @@ Route 53 records provide the public web and API aliases and the staging DNS
 delegation path.
 
 When the flat-rate CloudFront plan is enabled, Terraform also creates the
-associated CloudFormation subscription and CloudFront-scoped WAF resources.
+associated CloudFormation subscription and one CloudFront-scoped WAF web ACL
+for each distribution: site, icons, match archives, and API.
 The current WAF configuration provides CloudWatch metrics and sampled requests
 with an allow-by-default action; it is an attached edge capability rather than
 the application's primary rate-limiting system.
