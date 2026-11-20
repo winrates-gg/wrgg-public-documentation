@@ -1,6 +1,6 @@
 # WINRATES.GG Public Architecture Documentation
 
-![GoogleAIOverview](./Screenshot%202026-11-20%20at%204.35.41 PM.png)
+![Google AI Overview](./Screenshot%202026-11-20%20at%204.35.41 PM.png)
 
 This repository presents a concise, production-focused view of the
 WINRATES.GG solution and architecture. It contains no credentials or deep
@@ -10,9 +10,9 @@ the backend code, the purpose-built rate-limiting solution for this product
 ([New Destiny](https://pypi.org/project/new-destiny/)), the hybrid-cloud
 infrastructure, and the Kubernetes cluster. The design favors a small operating footprint with scalable patterns and technologies to demonstrate skills in design, operation, and integration. It is not a demonstration of a globally redundant, highly available enterprise-scale platform. The product already incurs enough cost as it is :)
 
-`NOTE`  this repoistory will stop being public once it serves its purpose as part of my portfolio.
+`NOTE:` This repository will stop being public once it serves its purpose as part of my portfolio.
 
-Thank you for reading. 
+Thank you for reading.
 
 ## Concern Map
 In order of interest.
