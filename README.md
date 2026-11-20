@@ -1,5 +1,7 @@
 # WINRATES.GG Public Architecture Documentation
 
+![GoogleAIOverview](./Screenshot%202026-11-20%20at%204.35.41 PM.png)
+
 This repository presents a concise, production-focused view of the
 WINRATES.GG solution and architecture. It contains no credentials or deep
 product-specific implementation details, but it does walk through most of the
